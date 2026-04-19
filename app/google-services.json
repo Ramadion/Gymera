@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "684744802241",
+    "project_id": "gymera-591e9",
+    "storage_bucket": "gymera-591e9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:684744802241:android:fd81c781c07d93110bb940",
+        "android_client_info": {
+          "package_name": "com.DeBiaseRamiro.gymera"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAcrXhNNin5M5g_WGQGRa-7M44is_gbzqQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
