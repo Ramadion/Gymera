@@ -7,7 +7,6 @@ plugins {
     id("com.google.gms.google-services")
     id("com.google.dagger.hilt.android")
     id("com.google.devtools.ksp")
-
 }
 
 android {
@@ -26,11 +25,8 @@ android {
         if (localPropertiesFile.exists()) {
             localProperties.load(localPropertiesFile.inputStream())
         }
-
-        buildConfigField("String", "EXERCISE_DB_KEY",
-            "\"${localProperties.getProperty("EXERCISE_DB_KEY", "")}\"")
-        buildConfigField("String", "GEMINI_API_KEY",
-            "\"${localProperties.getProperty("GEMINI_API_KEY", "")}\"")
+        buildConfigField("String", "EXERCISE_DB_KEY", "\"${localProperties.getProperty("EXERCISE_DB_KEY")}\"")
+        buildConfigField("String", "GEMINI_API_KEY", "\"${localProperties.getProperty("GEMINI_API_KEY")}\"")
     }
 
     buildTypes {
@@ -62,7 +58,7 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
-    implementation(libs.androidx.material3)
+    implementation("androidx.compose.material3:material3:1.2.1")
     implementation("androidx.compose.material:material-icons-extended")
 
     // Navigation Compose
@@ -74,7 +70,6 @@ dependencies {
 
     // Hilt
     implementation("com.google.dagger:hilt-android:2.51.1")
-    implementation(libs.animated.vector.drawable)
     ksp("com.google.dagger:hilt-android-compiler:2.51.1")
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
 
@@ -95,7 +90,7 @@ dependencies {
     implementation("com.google.firebase:firebase-database-ktx")
 
     // Google Sign In
-    implementation("com.google.android.gms:play-services-auth:21.1.1")
+    implementation("com.google.android.gms:play-services-auth:20.7.0")
 
     // Glide
     implementation("com.github.bumptech.glide:compose:1.0.0-beta01")
