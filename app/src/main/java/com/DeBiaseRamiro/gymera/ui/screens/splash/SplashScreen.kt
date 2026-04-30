@@ -54,7 +54,7 @@ fun SplashScreen(
             verticalArrangement = Arrangement.Center
         ) {
             Text(
-                text = "💪",
+                text = "Logo pendiente xd",
                 fontSize = 72.sp,
                 modifier = Modifier.alpha(alpha)
             )
