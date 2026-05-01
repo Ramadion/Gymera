@@ -12,7 +12,20 @@
           "package_name": "com.DeBiaseRamiro.gymera"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "684744802241-obc6nlj59oqtej1kvd48htfv2k1ivg6q.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.DeBiaseRamiro.gymera",
+            "certificate_hash": "94d0abaa2e6bfbd12d62a3f0d5d746ab5b27a725"
+          }
+        },
+        {
+          "client_id": "684744802241-ad4bk511d0vupa833eigvvvmtvlu2u5b.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAcrXhNNin5M5g_WGQGRa-7M44is_gbzqQ"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "684744802241-ad4bk511d0vupa833eigvvvmtvlu2u5b.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

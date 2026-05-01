@@ -5,6 +5,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.DeBiaseRamiro.gymera.ui.screens.splash.SplashScreen
+import com.DeBiaseRamiro.gymera.ui.screens.auth.LoginScreen
 
 
 // Definimos todas las rutas de la app como constantes
@@ -42,6 +43,21 @@ fun NavGraph(isUserLoggedIn: Boolean) {
                 onNavigateToHome = {
                     navController.navigate(Routes.ROUTINE) {
                         popUpTo(Routes.SPLASH) { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        composable(Routes.LOGIN) {
+            LoginScreen(
+                onNavigateToForm = {
+                    navController.navigate(Routes.FORM_IA) {
+                        popUpTo(Routes.LOGIN) { inclusive = true }
+                    }
+                },
+                onNavigateToRoutine = {
+                    navController.navigate(Routes.ROUTINE) {
+                        popUpTo(Routes.LOGIN) { inclusive = true }
                     }
                 }
             )
