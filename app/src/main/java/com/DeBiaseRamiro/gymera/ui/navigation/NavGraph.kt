@@ -7,6 +7,8 @@ import androidx.navigation.compose.rememberNavController
 import com.DeBiaseRamiro.gymera.ui.screens.splash.SplashScreen
 import com.DeBiaseRamiro.gymera.ui.screens.auth.LoginScreen
 import com.DeBiaseRamiro.gymera.ui.screens.form.FormScreen
+import com.DeBiaseRamiro.gymera.ui.screens.loading.LoadingScreen
+import com.DeBiaseRamiro.gymera.domain.model.UserProfile
 
 
 // Definimos todas las rutas de la app como constantes
@@ -42,7 +44,9 @@ fun NavGraph(isUserLoggedIn: Boolean) {
                     }
                 },
                 onNavigateToHome = {
-                    navController.navigate(Routes.FORM_IA) {
+                    //por ahora aca voy poniendo las pantallas que voy haciendo para probar
+                    //despues pongo la que va que es la home (que seria ROUTINE)
+                    navController.navigate(Routes.LOADING_IA) {
                         popUpTo(Routes.SPLASH) { inclusive = true }
                     }
                 }
@@ -70,6 +74,24 @@ fun NavGraph(isUserLoggedIn: Boolean) {
                     navController.navigate(Routes.LOADING_IA) {
                         popUpTo(Routes.FORM_IA) { inclusive = true }
                     }
+                }
+            )
+        }
+
+        composable(Routes.LOADING_IA) {
+            // Recuperamos el UserProfile que guardó el FormViewModel
+            // Por ahora lo pasamos via SavedStateHandle - lo configuramos abajo
+            LoadingScreen(
+                userProfile = UserProfile(), // temporal - Nota importante: pasar el UserProfile entre pantallas lo vamos a resolver bien en el siguiente paso usando un SharedViewModel. Por ahora la llamada a Gemini no va a funcionar todavía hasta que conectemos el formulario correctamente.
+
+
+                onRoutineGenerated = { routine ->
+                    navController.navigate(Routes.ROUTINE) {
+                        popUpTo(Routes.FORM_IA) { inclusive = true }
+                    }
+                },
+                onError = {
+                    navController.popBackStack()
                 }
             )
         }
