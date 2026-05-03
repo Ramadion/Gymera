@@ -7,9 +7,11 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import okhttp3.OkHttpClient
 import javax.inject.Singleton
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import java.util.concurrent.TimeUnit
 
 
 @Module
@@ -26,11 +28,21 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideRetrofit(): Retrofit = Retrofit.Builder()
-        .baseUrl("https://generativelanguage.googleapis.com/")
-        .addConverterFactory(GsonConverterFactory.create())
-        .build()
+    fun provideOkHttpClient(): OkHttpClient =
+        OkHttpClient.Builder()
+            .connectTimeout(60, TimeUnit.SECONDS)   // tiempo para conectar
+            .readTimeout(60, TimeUnit.SECONDS)       // tiempo para leer la respuesta
+            .writeTimeout(60, TimeUnit.SECONDS)      // tiempo para enviar el request
+            .build()
 
+    @Provides
+    @Singleton
+    fun provideRetrofit(okHttpClient: OkHttpClient): Retrofit =
+        Retrofit.Builder()
+            .baseUrl("https://generativelanguage.googleapis.com/")
+            .client(okHttpClient)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
     @Provides
     @Singleton
     fun provideGeminiApi(retrofit: Retrofit): GeminiApi =
