@@ -16,6 +16,8 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // Glide necesita JitPack
+        maven { url = uri("https://jitpack.io") }
     }
 }
 

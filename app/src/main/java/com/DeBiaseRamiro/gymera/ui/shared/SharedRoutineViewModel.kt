@@ -2,6 +2,7 @@ package com.DeBiaseRamiro.gymera.ui.shared
 
 import androidx.lifecycle.ViewModel
 import com.DeBiaseRamiro.gymera.domain.model.Routine
+import com.DeBiaseRamiro.gymera.domain.model.UserProfile
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -41,5 +42,17 @@ class SharedRoutineViewModel @Inject constructor() : ViewModel() {
      */
     fun clearRoutine() {
         _currentRoutine.value = null
+    }
+
+
+    private val _pendingUserProfile = MutableStateFlow<UserProfile?>(null)
+    val pendingUserProfile: StateFlow<UserProfile?> = _pendingUserProfile
+
+    fun setUserProfile(userProfile: UserProfile) {
+        _pendingUserProfile.value = userProfile
+    }
+
+    fun clearUserProfile() {
+        _pendingUserProfile.value = null
     }
 }

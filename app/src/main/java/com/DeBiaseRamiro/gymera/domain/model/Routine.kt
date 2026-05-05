@@ -20,6 +20,7 @@ data class WorkoutDay(
 data class Exercise(
     val id: String = "",
     val name: String = "",
+    val nameEn: String = "",
     val muscleGroup: String = "",
     val sets: Int = 0,
     val reps: String = "",          // "8-12" o "15"

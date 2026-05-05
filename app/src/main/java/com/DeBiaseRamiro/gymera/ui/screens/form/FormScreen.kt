@@ -11,22 +11,23 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.DeBiaseRamiro.gymera.domain.model.UserProfile
 import com.DeBiaseRamiro.gymera.ui.theme.*
 
 @Composable
 fun FormScreen(
-    onFormCompleted: () -> Unit,
+    onFormCompleted: (UserProfile) -> Unit,
     viewModel: FormViewModel = hiltViewModel()
 ) {
     val currentStep by viewModel.currentStep.collectAsState()
+    val userProfile by viewModel.userProfile.collectAsState()
 
-    // Cuando se completan todos los pasos, navegamos a loading_ia
+
     LaunchedEffect(currentStep) {
         if (currentStep >= viewModel.totalSteps) {
-            onFormCompleted()
+            onFormCompleted(userProfile)       // ← lo pasamos completo
         }
     }
-
     Box(
         modifier = Modifier
             .fillMaxSize()
