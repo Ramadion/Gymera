@@ -46,17 +46,13 @@ class ExerciseImageRepository @Inject constructor(
      */
     suspend fun getImageUrl(nameEn: String): String? {
         if (nameEn.isBlank()) return null
-
-        // Cargamos la lista si no está en memoria todavía
         val exercises = getExerciseList() ?: return null
 
-        // Buscamos el mejor match para el nombre dado
-        val match = findBestMatch(nameEn.trim().lowercase(), exercises)
-            ?: return null
 
-        // Tomamos la primera imagen del ejercicio encontrado
+        val cleanName = nameEn.replace("+", " ").trim().lowercase()
+
+        val match = findBestMatch(cleanName, exercises) ?: return null
         val imagePath = match.images.firstOrNull() ?: return null
-
         return IMAGE_BASE_URL + imagePath
     }
 
@@ -130,5 +126,27 @@ class ExerciseImageRepository @Inject constructor(
             .filter { (_, commonCount) -> commonCount >= 2 }
             .maxByOrNull { (_, commonCount) -> commonCount }
             ?.first
+    }
+
+    // devuelve el DTO completo del ejercicio -----
+    // Se usa en ExerciseDetailViewModel para mostrar todos los metadatos
+    suspend fun getExerciseDetail(nameEn: String): FreeExerciseDto? {
+        if (nameEn.isBlank()) return null
+        val exercises = getExerciseList() ?: return null
+
+        android.util.Log.d("GYM_DEBUG", "Buscando: '$nameEn' en ${exercises.size} ejercicios")
+
+        val match = findBestMatch(nameEn.trim().lowercase(), exercises)
+
+        android.util.Log.d("GYM_DEBUG", "Resultado para '$nameEn': ${match?.name ?: "NULL"}")
+
+        return match
+    }
+
+    // construye la URL de imagen desde un DTO ya encontrado -----
+    // Evita hacer el fuzzy match dos veces cuando ya tenés el DTO
+    fun getImageUrlFromDto(dto: FreeExerciseDto): String? {
+        val imagePath = dto.images.firstOrNull() ?: return null
+        return IMAGE_BASE_URL + imagePath
     }
 }

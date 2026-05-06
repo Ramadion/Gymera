@@ -21,16 +21,27 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
 import com.bumptech.glide.integration.compose.GlideImage
-import com.bumptech.glide.integration.compose.placeholder
 import com.DeBiaseRamiro.gymera.domain.model.Exercise
 import com.DeBiaseRamiro.gymera.domain.model.WorkoutDay
 import com.DeBiaseRamiro.gymera.ui.theme.*
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
+
+// ── Extensión para encodear strings de forma segura antes de meterlos en una URL de navegación
+// Se define a nivel de archivo para que tanto DayDetailScreen como cualquier composable del
+// archivo puedan usarla sin necesidad de importar nada extra
+// Reemplazá la extensión encodeForNav() existente por esta versión
+fun String.encodeForNav(): String =
+    URLEncoder.encode(this, StandardCharsets.UTF_8.toString())
+        .replace("+", "%20") // los espacios deben ser %20, no + en path/query de Navigation
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DayDetailScreen(
     workoutDay: WorkoutDay,
-    onExerciseClick: (exerciseId: String) -> Unit,
+    // Recibe la ruta completa ya construida — el NavGraph es quien llama a navController.navigate()
+    // De esta forma DayDetailScreen no necesita saber nada sobre el NavController
+    onExerciseClick: (route: String) -> Unit,
     onBack: () -> Unit,
     viewModel: DayDetailViewModel = hiltViewModel()
 ) {
@@ -112,9 +123,20 @@ fun DayDetailScreen(
 
                 items(workoutDay.exercises, key = { it.id }) { exercise ->
                     ExerciseCard(
-                        exercise    = exercise,
-                        imageState  = imageStates[exercise.id] ?: ExerciseImageState.Loading,
-                        onClick     = { onExerciseClick(exercise.id) }
+                        exercise   = exercise,
+                        imageState = imageStates[exercise.id] ?: ExerciseImageState.Loading,
+                        onClick    = {
+                            // La ruta se construye ACÁ, donde tenemos acceso al objeto exercise
+                            // encodeForNav() está disponible porque está definida en este mismo archivo
+                            val route = "exercise_detail" +
+                                    "?nameEn=${exercise.nameEn.encodeForNav()}" +
+                                    "&nameEs=${exercise.name.encodeForNav()}" +
+                                    "&sets=${exercise.sets}" +
+                                    "&reps=${exercise.reps.encodeForNav()}" +
+                                    "&restSeconds=${exercise.restSeconds}" +
+                                    "&notes=${exercise.notes.encodeForNav()}"
+                            onExerciseClick(route)
+                        }
                     )
                 }
 
@@ -129,12 +151,13 @@ fun DayDetailScreen(
 private fun ExerciseCard(
     exercise: Exercise,
     imageState: ExerciseImageState,
+    // onClick es un lambda simple — no sabe nada de navegación ni de NavController
     onClick: () -> Unit
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() },
+            .clickable { onClick() }, // limpio: delega al caller
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = SurfaceDark),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
@@ -147,7 +170,7 @@ private fun ExerciseCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
 
-            // ── Imagen del ejercicio (GIF) ─────────────────────────────────
+            // ── Imagen del ejercicio ───────────────────────────────────────
             Box(
                 modifier = Modifier
                     .size(90.dp)
@@ -157,7 +180,6 @@ private fun ExerciseCard(
             ) {
                 when (val state = imageState) {
                     is ExerciseImageState.Loading -> {
-                        // Spinner mientras carga
                         CircularProgressIndicator(
                             modifier = Modifier.size(24.dp),
                             color = PurplePrimary,
@@ -165,7 +187,6 @@ private fun ExerciseCard(
                         )
                     }
                     is ExerciseImageState.Success -> {
-                        // GIF cargado con Glide
                         GlideImage(
                             model = state.imageUrl,
                             contentDescription = exercise.name,
@@ -174,7 +195,6 @@ private fun ExerciseCard(
                         )
                     }
                     is ExerciseImageState.Error -> {
-                        // Emoji fallback si no se pudo cargar
                         Text(
                             text = "💪",
                             fontSize = 32.sp
@@ -188,31 +208,28 @@ private fun ExerciseCard(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                // Nombre en español
                 Text(
                     text = exercise.name,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
                     color = OnBackground
                 )
-                // Músculo objetivo
                 Text(
                     text = exercise.muscleGroup,
                     fontSize = 13.sp,
                     color = PurplePrimary
                 )
-                // Chips de series / reps / descanso
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     ExerciseChip("${exercise.sets}x${exercise.reps}")
                     ExerciseChip("${exercise.restSeconds}s")
                 }
             }
 
-            // Flecha de navegación
+            // Flecha indicadora de navegación
             Text(text = "›", fontSize = 24.sp, color = MutedGray)
         }
 
-        // Notas de la IA (si existen) — fuera del Row, debajo
+        // Notas de la IA — se muestran debajo del Row solo si existen
         if (exercise.notes.isNotBlank()) {
             HorizontalDivider(
                 modifier = Modifier.padding(horizontal = 12.dp),

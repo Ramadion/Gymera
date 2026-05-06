@@ -20,6 +20,8 @@ import com.DeBiaseRamiro.gymera.ui.screens.loading.LoadingScreen
 import com.DeBiaseRamiro.gymera.ui.screens.routine.RoutineScreen
 import com.DeBiaseRamiro.gymera.ui.screens.splash.SplashScreen
 import com.DeBiaseRamiro.gymera.ui.shared.SharedRoutineViewModel
+import androidx.navigation.navArgument
+import com.DeBiaseRamiro.gymera.ui.screens.exercisedetail.ExerciseDetailScreen
 
 object Routes {
     const val SPLASH          = "splash"
@@ -191,22 +193,47 @@ fun NavGraph(isUserLoggedIn: Boolean) {
                 } else {
                     DayDetailScreen(
                         workoutDay = workoutDay,
-                        onExerciseClick = { exerciseId ->
-                            navController.navigate(Routes.exerciseDetail(exerciseId))
-                        },
-                        onBack = { navController.popBackStack() }
+                        onBack = { navController.popBackStack() },
+                        onExerciseClick = { route ->
+                            // route ya viene completa con todos los parámetros encodeados
+                            navController.navigate(route)
+                        }
                     )
                 }
             }
 
             // ── Exercise Detail (feature/exercise-detail) ─────────────────
             composable(
-                route = Routes.EXERCISE_DETAIL,
-                arguments = listOf(navArgument("exerciseId") { type = NavType.StringType })
+                // Usamos query params para pasar múltiples valores de tipos simples
+                // La ruta queda: exercise_detail?nameEn=...&nameEs=...&sets=...&reps=...&rest=...&notes=...
+                route = "exercise_detail" +
+                        "?nameEn={nameEn}" +
+                        "&nameEs={nameEs}" +
+                        "&sets={sets}" +
+                        "&reps={reps}" +
+                        "&restSeconds={restSeconds}" +
+                        "&notes={notes}",
+                arguments = listOf(
+                    navArgument("nameEn")      { type = NavType.StringType; defaultValue = "" },
+                    navArgument("nameEs")      { type = NavType.StringType; defaultValue = "" },
+                    navArgument("sets")        { type = NavType.IntType;    defaultValue = 0  },
+                    navArgument("reps")        { type = NavType.StringType; defaultValue = "" },
+                    navArgument("restSeconds") { type = NavType.IntType;    defaultValue = 60 },
+                    navArgument("notes")       { type = NavType.StringType; defaultValue = "" }
+                )
             ) { backStackEntry ->
-                val exerciseId = backStackEntry.arguments?.getString("exerciseId") ?: ""
-                // TODO: ExerciseDetailScreen(exerciseId = exerciseId)
+                val args = backStackEntry.arguments!!
+                ExerciseDetailScreen(
+                    nameEn      = args.getString("nameEn")      ?: "",
+                    nameEs      = args.getString("nameEs")      ?: "",
+                    sets        = args.getInt("sets"),
+                    reps        = args.getString("reps")        ?: "",
+                    restSeconds = args.getInt("restSeconds"),
+                    notes       = args.getString("notes")       ?: "",
+                    onBack      = { navController.popBackStack() }
+                )
             }
+
 
             // ── Search (feature/search) ───────────────────────────────────
             composable(Routes.SEARCH) {
