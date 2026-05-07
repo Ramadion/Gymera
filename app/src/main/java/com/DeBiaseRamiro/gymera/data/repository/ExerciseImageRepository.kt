@@ -1,152 +1,149 @@
 package com.DeBiaseRamiro.gymera.data.repository
 
+import com.DeBiaseRamiro.gymera.data.local.dao.ExerciseCacheDao
+import com.DeBiaseRamiro.gymera.data.local.entity.ExerciseCacheEntity
 import com.DeBiaseRamiro.gymera.data.remote.api.FreeExerciseDbApi
 import com.DeBiaseRamiro.gymera.data.remote.dto.FreeExerciseDto
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * ExerciseImageRepository
- *
- * Responsabilidad única: dado un nombre de ejercicio en inglés,
- * devolver la URL de su imagen desde el repo free-exercise-db.
- *
- * Estrategia de caché en memoria:
- * - La primera vez que se llama a getImageUrl(), descarga el JSON completo
- *   (~800 ejercicios) y lo guarda en _exerciseList.
- * - Las llamadas siguientes usan la lista en memoria directamente.
- * - En feature/room, esto se reemplaza por Room como fuente de verdad.
- *
- * Estrategia de búsqueda (fuzzy matching):
- * El nameEn de Gemini puede ser "barbell bench press" y el repo tiene
- * "Barbell Bench Press - Medium Grip". Usamos varios niveles de matching:
- *   1. Match exacto (ignorando mayúsculas)
- *   2. El nombre del repo contiene el nameEn completo
- *   3. El nameEn contiene el nombre del repo
- *   4. Coincidencia de palabras clave (al menos 2 palabras en común)
- */
 @Singleton
 class ExerciseImageRepository @Inject constructor(
-    private val freeExerciseDbApi: FreeExerciseDbApi
+    private val freeExerciseDbApi: FreeExerciseDbApi,
+    private val exerciseCacheDao: ExerciseCacheDao   // ← NUEVO
 ) {
-    // Caché en memoria — se llena la primera vez y no se vuelve a descargar
-    private var _exerciseList: List<FreeExerciseDto>? = null
-
-    // Base URL para construir las URLs de imagen
     companion object {
         const val IMAGE_BASE_URL =
             "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/"
     }
 
-    /**
-     * Dado un nombre de ejercicio en inglés (como lo manda Gemini),
-     * devuelve la URL de su imagen, o null si no se encuentra.
-     *
-     * @param nameEn Nombre en inglés del ejercicio (ej: "barbell bench press")
-     */
+    // Cache en memoria para la sesión actual — evita hits a Room en cada frame
+    private var _exerciseList: List<FreeExerciseDto>? = null
+
+    // ── API pública ───────────────────────────────────────────────────────
+
     suspend fun getImageUrl(nameEn: String): String? {
         if (nameEn.isBlank()) return null
-        val exercises = getExerciseList() ?: return null
-
-
         val cleanName = nameEn.replace("+", " ").trim().lowercase()
-
+        val exercises = getExerciseList() ?: return null
         val match = findBestMatch(cleanName, exercises) ?: return null
-        val imagePath = match.images.firstOrNull() ?: return null
-        return IMAGE_BASE_URL + imagePath
+        return match.images.firstOrNull()?.let { IMAGE_BASE_URL + it }
     }
 
-    /**
-     * Descarga el JSON completo la primera vez y lo cachea en memoria.
-     * Las llamadas siguientes devuelven la lista cacheada directamente.
-     */
+    suspend fun getExerciseDetail(nameEn: String): FreeExerciseDto? {
+        if (nameEn.isBlank()) return null
+        val cleanName = nameEn.replace("+", " ").trim().lowercase()
+        val exercises = getExerciseList() ?: return null
+        return findBestMatch(cleanName, exercises)
+    }
+
+    fun getImageUrlFromDto(dto: FreeExerciseDto): String? =
+        dto.images.firstOrNull()?.let { IMAGE_BASE_URL + it }
+
+    // ── Carga de la lista con cache en 3 niveles ──────────────────────────
+    // Nivel 1: memoria RAM (más rápido, dura lo que dura el proceso)
+    // Nivel 2: Room/SQLite (persiste entre reinicios, nunca más descarga)
+    // Nivel 3: red (solo la primera vez en la vida de la app)
+
     private suspend fun getExerciseList(): List<FreeExerciseDto>? {
-        // Si ya está en memoria, la devolvemos directamente
+        // Nivel 1: ya está en RAM
         _exerciseList?.let { return it }
 
+        // Nivel 2: está en Room — convertimos entities a DTOs y cargamos en RAM
+        val cachedCount = exerciseCacheDao.getCount()
+        if (cachedCount > 0) {
+            val fromRoom = exerciseCacheDao.getAll().map { it.toDto() }
+            _exerciseList = fromRoom
+            return fromRoom
+        }
+
+        // Nivel 3: primera vez — descargamos de GitHub y guardamos en Room
         return try {
-            android.util.Log.d("GYMERA_DEBUG", "Descargando lista de ejercicios...")
-            val list = freeExerciseDbApi.getAllExercises()
-            _exerciseList = list
-            android.util.Log.d("GYMERA_DEBUG", "Lista descargada: ${list.size} ejercicios")
-            list
+            val downloaded = freeExerciseDbApi.getAllExercises()
+            // Guardamos en Room para que nunca más se necesite la red
+            saveToRoom(downloaded)
+            _exerciseList = downloaded
+            downloaded
         } catch (e: Exception) {
-            android.util.Log.e("GYMERA_DEBUG", "Error descargando ejercicios: ${e.message}")
+            android.util.Log.e("GYM_DEBUG", "Error descargando ejercicios: ${e.message}")
             null
         }
     }
 
-    /**
-     * Encuentra el ejercicio que mejor coincide con el nombre buscado.
-     *
-     * Niveles de matching en orden de prioridad:
-     * 1. Match exacto
-     * 2. El nombre del repo contiene el nameEn completo
-     * 3. El nameEn contiene el nombre del repo
-     * 4. Al menos 2 palabras clave en común (excluye palabras cortas)
-     */
-    private fun findBestMatch(
-        query: String,
-        exercises: List<FreeExerciseDto>
-    ): FreeExerciseDto? {
+    // ── Persistencia en Room ──────────────────────────────────────────────
 
-        // Nivel 1: match exacto (ignorando mayúsculas)
-        exercises.firstOrNull { it.name.lowercase() == query }
-            ?.let { return it }
+    private suspend fun saveToRoom(exercises: List<FreeExerciseDto>) {
+        val entities = exercises.map { dto ->
+            ExerciseCacheEntity(
+                id               = dto.id,
+                name             = dto.name,
+                primaryMuscles   = dto.primaryMuscles.joinToString(","),
+                secondaryMuscles = dto.secondaryMuscles.joinToString(","),
+                equipment        = dto.equipment ?: "",
+                level            = dto.level,
+                category         = dto.category,
+                // Guardamos las primeras 2 URLs de imagen ya construidas
+                imageUrl         = dto.images.getOrNull(0)?.let { IMAGE_BASE_URL + it } ?: "",
+                imageUrl2        = dto.images.getOrNull(1)?.let { IMAGE_BASE_URL + it } ?: "",
+                instructions     = dto.instructions.joinToString("||"), // separador especial
+                cachedAt         = System.currentTimeMillis()
+            )
+        }
+        exerciseCacheDao.insertAll(entities)
+    }
 
-        // Nivel 2: el nombre del repo contiene el query completo
-        // ej: query="bench press" → match con "Barbell Bench Press - Medium Grip"
-        exercises.firstOrNull { it.name.lowercase().contains(query) }
-            ?.let { return it }
+    // ── Conversión Entity → DTO ───────────────────────────────────────────
+    // Reconstruimos el DTO desde Room para que el resto del código
+    // siga funcionando igual sin saber si vino de red o de Room
 
-        // Nivel 3: el query contiene el nombre del repo
-        // ej: query="dumbbell romanian deadlift" → match con "Romanian Deadlift"
-        exercises.firstOrNull { query.contains(it.name.lowercase()) }
-            ?.let { return it }
+    private fun ExerciseCacheEntity.toDto(): FreeExerciseDto {
+        // Reconstruimos la ruta relativa de imagen desde la URL completa
+        val relativeImage1 = imageUrl.removePrefix(IMAGE_BASE_URL)
+        val relativeImage2 = imageUrl2.removePrefix(IMAGE_BASE_URL)
 
-        // Nivel 4: coincidencia de palabras clave
-        // Filtramos palabras cortas o genéricas que no aportan al matching
+        return FreeExerciseDto(
+            id               = id,
+            name             = name,
+            primaryMuscles   = if (primaryMuscles.isBlank()) emptyList()
+            else primaryMuscles.split(","),
+            secondaryMuscles = if (secondaryMuscles.isBlank()) emptyList()
+            else secondaryMuscles.split(","),
+            equipment        = equipment.ifBlank { null },
+            level            = level,
+            category         = category,
+            instructions     = if (instructions.isBlank()) emptyList()
+            else instructions.split("||"),
+            // El DTO espera rutas relativas en images[], igual que el JSON original
+            images           = listOfNotNull(
+                relativeImage1.ifBlank { null },
+                relativeImage2.ifBlank { null }
+            )
+        )
+    }
+
+    // ── Fuzzy matching —──────────────────────────────────────
+
+    private fun findBestMatch(query: String, exercises: List<FreeExerciseDto>): FreeExerciseDto? {
+        exercises.firstOrNull { it.name.lowercase() == query }?.let { return it }
+        exercises.firstOrNull { it.name.lowercase().contains(query) }?.let { return it }
+        exercises.firstOrNull { query.contains(it.name.lowercase()) }?.let { return it }
+
         val stopWords = setOf("the", "a", "an", "with", "on", "at", "to", "of", "in", "and")
         val queryWords = query.split(" ")
             .filter { it.length > 2 && it !in stopWords }
             .toSet()
-
         if (queryWords.size < 2) return null
 
-        // Buscamos el ejercicio con más palabras en común
         return exercises
             .map { exercise ->
                 val exerciseWords = exercise.name.lowercase()
                     .split(" ")
                     .filter { it.length > 2 && it !in stopWords }
                     .toSet()
-                val commonWords = queryWords.intersect(exerciseWords).size
-                exercise to commonWords
+                exercise to queryWords.intersect(exerciseWords).size
             }
-            .filter { (_, commonCount) -> commonCount >= 2 }
-            .maxByOrNull { (_, commonCount) -> commonCount }
+            .filter { (_, count) -> count >= 2 }
+            .maxByOrNull { (_, count) -> count }
             ?.first
-    }
-
-    // devuelve el DTO completo del ejercicio -----
-    // Se usa en ExerciseDetailViewModel para mostrar todos los metadatos
-    suspend fun getExerciseDetail(nameEn: String): FreeExerciseDto? {
-        if (nameEn.isBlank()) return null
-        val exercises = getExerciseList() ?: return null
-
-        android.util.Log.d("GYM_DEBUG", "Buscando: '$nameEn' en ${exercises.size} ejercicios")
-
-        val match = findBestMatch(nameEn.trim().lowercase(), exercises)
-
-        android.util.Log.d("GYM_DEBUG", "Resultado para '$nameEn': ${match?.name ?: "NULL"}")
-
-        return match
-    }
-
-    // construye la URL de imagen desde un DTO ya encontrado -----
-    // Evita hacer el fuzzy match dos veces cuando ya tenés el DTO
-    fun getImageUrlFromDto(dto: FreeExerciseDto): String? {
-        val imagePath = dto.images.firstOrNull() ?: return null
-        return IMAGE_BASE_URL + imagePath
     }
 }

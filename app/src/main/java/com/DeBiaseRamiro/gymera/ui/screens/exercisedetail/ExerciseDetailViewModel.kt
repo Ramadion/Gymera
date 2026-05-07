@@ -55,25 +55,21 @@ class ExerciseDetailViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = ExerciseDetailUiState.Loading
 
-            // Buscamos el ejercicio en el JSON cacheado usando fuzzy matching
             val dto = exerciseImageRepository.getExerciseDetail(nameEn)
-            val imageUrls = dto!!.images.mapNotNull { imagePath ->
-                if (imagePath.isNotBlank()) ExerciseImageRepository.IMAGE_BASE_URL + imagePath
-                else null
-            }
 
+            // Primero chequeamos null — si es null, error y salimos
             if (dto == null) {
-                // Si no encontramos el ejercicio en free-exercise-db, mostramos error
-                // Esto puede pasar con ejercicios muy específicos que Gemini inventó
                 _uiState.value = ExerciseDetailUiState.Error(
                     "No se encontró información detallada para \"$nameEs\""
                 )
                 return@launch
             }
 
-            // Construimos la URL de imagen usando el DTO que ya encontramos
-            // (evita hacer el fuzzy match dos veces)
-            val imageUrl = exerciseImageRepository.getImageUrlFromDto(dto)
+            // Recién ACÁ accedemos a dto.images, ya sabemos que no es null
+            val imageUrls = dto.images
+                .orEmpty()
+                .filter { it.isNotBlank() }
+                .map { ExerciseImageRepository.IMAGE_BASE_URL + it }
 
             _uiState.value = ExerciseDetailUiState.Success(
                 dto = dto,

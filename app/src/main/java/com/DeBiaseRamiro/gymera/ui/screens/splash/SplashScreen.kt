@@ -14,38 +14,44 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.DeBiaseRamiro.gymera.R
 import com.DeBiaseRamiro.gymera.ui.theme.*
 import kotlinx.coroutines.delay
 
 @Composable
 fun SplashScreen(
+    // Ya no recibe isUserLoggedIn — el ViewModel lo determina consultando Room
     onNavigateToLogin: () -> Unit,
-    onNavigateToHome: () -> Unit,
-    isUserLoggedIn: Boolean
+    onNavigateToForm: () -> Unit,
+    onNavigateToRoutine: () -> Unit,
+    viewModel: SplashViewModel = hiltViewModel()
 ) {
-    // Controla si el logo está visible o no (para la animación)
     var visible by remember { mutableStateOf(false) }
-
-    // Anima la opacidad del logo de 0 a 1
     val alpha by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
         animationSpec = tween(durationMillis = 1000),
         label = "splash_alpha"
     )
 
-    // Al entrar a la pantalla: activa la animación y navega después de 2 segundos
-    LaunchedEffect(Unit) {
-        visible = true
-        delay(2000)
-        if (isUserLoggedIn) {
-            onNavigateToHome()
-        } else {
-            onNavigateToLogin()
+    val destination by viewModel.destination.collectAsState()
+
+    LaunchedEffect(Unit) { visible = true }
+
+    // Observamos el destino — cuando el ViewModel termine de verificar Room,
+    // esperamos al menos 2 segundos de splash y navegamos
+    LaunchedEffect(destination) {
+        if (destination !is SplashDestination.Loading) {
+            delay(2000) // mínimo 2s de splash para que se vea la animación
+            when (destination) {
+                is SplashDestination.Login   -> onNavigateToLogin()
+                is SplashDestination.Form    -> onNavigateToForm()
+                is SplashDestination.Routine -> onNavigateToRoutine()
+                else -> {}
+            }
         }
     }
 
-    // UI
     Box(
         modifier = Modifier
             .fillMaxSize()

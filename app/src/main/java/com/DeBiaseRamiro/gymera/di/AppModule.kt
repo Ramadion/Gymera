@@ -1,5 +1,6 @@
 package com.DeBiaseRamiro.gymera.di
 
+import android.content.Context
 import com.DeBiaseRamiro.gymera.data.remote.api.FreeExerciseDbApi
 import com.DeBiaseRamiro.gymera.data.remote.api.GeminiApi
 import com.google.firebase.auth.FirebaseAuth
@@ -14,6 +15,12 @@ import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 import javax.inject.Qualifier
 import javax.inject.Singleton
+import androidx.room.Room
+import com.DeBiaseRamiro.gymera.data.local.dao.ExerciseCacheDao
+import com.DeBiaseRamiro.gymera.data.local.dao.RoutineDao
+import com.DeBiaseRamiro.gymera.data.local.database.GymeraDatabase
+import dagger.hilt.android.qualifiers.ApplicationContext
+
 
 @Qualifier @Retention(AnnotationRetention.BINARY)
 annotation class GeminiRetrofit
@@ -66,4 +73,23 @@ object AppModule {
     @Provides @Singleton
     fun provideFreeExerciseDbApi(@FreeExerciseDbRetrofit retrofit: Retrofit): FreeExerciseDbApi =
         retrofit.create(FreeExerciseDbApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideGymeraDatabase(@ApplicationContext context: Context): GymeraDatabase =
+        Room.databaseBuilder(
+            context,
+            GymeraDatabase::class.java,
+            "gymera_database"   // nombre del archivo .db en el dispositivo
+        ).build()
+
+    @Provides
+    @Singleton
+    fun provideRoutineDao(db: GymeraDatabase): RoutineDao = db.routineDao()
+
+    @Provides
+    @Singleton
+    fun provideExerciseCacheDao(db: GymeraDatabase): ExerciseCacheDao = db.exerciseCacheDao()
+
+
 }

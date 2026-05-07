@@ -96,14 +96,19 @@ fun NavGraph(isUserLoggedIn: Boolean) {
             // ── Splash ────────────────────────────────────────────────────
             composable(Routes.SPLASH) {
                 SplashScreen(
-                    isUserLoggedIn = isUserLoggedIn,
+                    // Ya no pasa isUserLoggedIn — el SplashViewModel lo maneja solo
                     onNavigateToLogin = {
                         navController.navigate(Routes.LOGIN) {
                             popUpTo(Routes.SPLASH) { inclusive = true }
                         }
                     },
-                    onNavigateToHome = {
+                    onNavigateToForm = {
                         navController.navigate(Routes.FORM_IA) {
+                            popUpTo(Routes.SPLASH) { inclusive = true }
+                        }
+                    },
+                    onNavigateToRoutine = {
+                        navController.navigate(Routes.ROUTINE) {
                             popUpTo(Routes.SPLASH) { inclusive = true }
                         }
                     }
@@ -144,8 +149,10 @@ fun NavGraph(isUserLoggedIn: Boolean) {
 
                 LoadingScreen(
                     userProfile = userProfile ?: UserProfile(),
-                    onRoutineGenerated = { routine ->
-                        sharedRoutineViewModel.setRoutine(routine)
+                    onRoutineGenerated = { _ ->
+                        // Ya NO llamamos setRoutine() — la rutina ya está en Room
+                        // y el Flow de SharedRoutineViewModel la emite automáticamente.
+                        // Solo limpiamos el perfil pendiente y navegamos.
                         sharedRoutineViewModel.clearUserProfile()
                         navController.navigate(Routes.ROUTINE) {
                             popUpTo(Routes.SPLASH) { inclusive = true }

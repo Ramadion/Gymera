@@ -1,58 +1,52 @@
 package com.DeBiaseRamiro.gymera.ui.shared
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.DeBiaseRamiro.gymera.domain.model.Routine
 import com.DeBiaseRamiro.gymera.domain.model.UserProfile
+import com.DeBiaseRamiro.gymera.domain.repository.RoutineRepository
+import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/**
- * SharedRoutineViewModel
- *
- * ViewModel compartido entre pantallas, scoped a MainActivity.
- * Su propósito es actuar como estado global temporal para la Routine
- * generada por Gemini, mientras no tenemos Room implementado.
- *
- * Una vez que implementemos Room (feature/room), este ViewModel
- * se simplifica: RoutineScreen leerá directo de Room via Flow,
- * y este ViewModel solo guardará en Room al recibir la rutina.
- *
- * Anotado con @HiltViewModel para que Hilt lo inyecte correctamente.
- */
 @HiltViewModel
-class SharedRoutineViewModel @Inject constructor() : ViewModel() {
+class SharedRoutineViewModel @Inject constructor(
+    private val routineRepository: RoutineRepository,
+    private val firebaseAuth: FirebaseAuth
+) : ViewModel() {
 
-    // StateFlow que contiene la rutina activa, o null si no hay ninguna
-    private val _currentRoutine = MutableStateFlow<Routine?>(null)
-    val currentRoutine: StateFlow<Routine?> = _currentRoutine
+    // Obtenemos el UID del usuario actual (puede ser null si no está logueado)
+    private val userUid: String? = firebaseAuth.currentUser?.uid
 
-    /**
-     * Se llama desde LoadingScreen cuando Gemini termina de generar la rutina.
-     * Guarda la rutina en memoria para que RoutineScreen pueda leerla.
-     */
-    fun setRoutine(routine: Routine) {
-        _currentRoutine.value = routine
-    }
+    // currentRoutine es un StateFlow que emite la rutina activa desde Room.
+    // stateIn() es lo que convierte el Flow normal del repositorio en StateFlow.
+    // SharingStarted.WhileSubscribed(5000) mantiene el Flow activo 5s después
+    // de que no haya observers, para sobrevivir rotaciones de pantalla.
+    val currentRoutine: StateFlow<Routine?> = if (userUid != null) {
+        routineRepository.getActiveRoutineFlow(userUid)
+    } else {
+        flowOf(null)
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = null
+    )
 
-    /**
-     * Se llama cuando el usuario quiere generar una nueva rutina.
-     * Resetea el estado para forzar el flujo de Formulario → Loading → Routine.
-     */
-    fun clearRoutine() {
-        _currentRoutine.value = null
-    }
-
-
+    // UserProfile pendiente durante el flujo Form → Loading (sin cambios)
     private val _pendingUserProfile = MutableStateFlow<UserProfile?>(null)
     val pendingUserProfile: StateFlow<UserProfile?> = _pendingUserProfile
 
-    fun setUserProfile(userProfile: UserProfile) {
-        _pendingUserProfile.value = userProfile
-    }
+    fun setUserProfile(profile: UserProfile) { _pendingUserProfile.value = profile }
+    fun clearUserProfile()                   { _pendingUserProfile.value = null }
 
-    fun clearUserProfile() {
-        _pendingUserProfile.value = null
+    // Desactiva la rutina en Room — el Flow de currentRoutine emitirá null
+    // automáticamente y la UI navegará al formulario sola
+    fun clearRoutine() {
+        viewModelScope.launch {
+            val uid = userUid ?: return@launch
+            routineRepository.deactivateActiveRoutine(uid)
+        }
     }
 }

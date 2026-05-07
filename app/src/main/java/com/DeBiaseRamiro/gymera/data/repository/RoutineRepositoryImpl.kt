@@ -1,23 +1,28 @@
 package com.DeBiaseRamiro.gymera.data.repository
 
 import com.DeBiaseRamiro.gymera.BuildConfig
+import com.DeBiaseRamiro.gymera.data.local.dao.RoutineDao
+import com.DeBiaseRamiro.gymera.data.local.entity.ExerciseAssignmentEntity
+import com.DeBiaseRamiro.gymera.data.local.entity.RoutineEntity
+import com.DeBiaseRamiro.gymera.data.local.entity.WorkoutDayEntity
 import com.DeBiaseRamiro.gymera.data.remote.api.GeminiApi
-import com.DeBiaseRamiro.gymera.data.remote.dto.GeminiRequest
-import com.DeBiaseRamiro.gymera.data.remote.dto.GeminiRequestContent
-import com.DeBiaseRamiro.gymera.data.remote.dto.GeminiRequestPart
+import com.DeBiaseRamiro.gymera.data.remote.dto.*
 import com.DeBiaseRamiro.gymera.domain.model.*
 import com.DeBiaseRamiro.gymera.domain.repository.RoutineRepository
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import java.util.UUID
 import javax.inject.Inject
 
 class RoutineRepositoryImpl @Inject constructor(
-    private val geminiApi: GeminiApi
+    private val geminiApi: GeminiApi,
+    private val routineDao: RoutineDao
 ) : RoutineRepository {
 
+    // ── generateRoutine — sin cambios respecto a tu versión actual ────────
     override suspend fun generateRoutine(userProfile: UserProfile): Routine {
-
         val prompt = """
             Eres un entrenador personal experto. Genera una rutina de entrenamiento semanal
             personalizada basada en estos datos del usuario:
@@ -74,9 +79,7 @@ class RoutineRepositoryImpl @Inject constructor(
 
         val requestBody = GeminiRequest(
             contents = listOf(
-                GeminiRequestContent(
-                    parts = listOf(GeminiRequestPart(text = prompt))
-                )
+                GeminiRequestContent(parts = listOf(GeminiRequestPart(text = prompt)))
             )
         )
 
@@ -89,37 +92,142 @@ class RoutineRepositoryImpl @Inject constructor(
             ?.content?.parts?.firstOrNull()
             ?.text ?: throw Exception("Respuesta vacía de Gemini")
 
-        // Limpiamos por si Gemini igual manda markdown a pesar de pedirle que no
         val cleanJson = jsonText.trim()
             .removePrefix("```json")
             .removePrefix("```")
             .removeSuffix("```")
             .trim()
 
-        android.util.Log.d("GYMERA_DEBUG", "JSON de Gemini: $cleanJson")
-
-
         return parseRoutineFromJson(cleanJson, userProfile)
     }
 
+    // ── saveRoutine — guarda rutina completa en Room ──────────────────────
+    override suspend fun saveRoutine(routine: Routine, userUid: String) {
+        // 1. Desactivamos cualquier rutina activa anterior del usuario
+        routineDao.deactivateAllRoutines(userUid)
+
+        // 2. Insertamos la nueva rutina como activa
+        routineDao.insertRoutine(
+            RoutineEntity(
+                id              = routine.id,
+                userUid         = userUid,
+                goal            = routine.goal,
+                daysPerWeek     = routine.daysPerWeek,
+                sessionDuration = 0,   // no está en el modelo de dominio, valor default
+                level           = routine.level,
+                limitations     = "",
+                generatedAt     = System.currentTimeMillis(),
+                isActive        = 1
+            )
+        )
+
+        // 3. Insertamos los días de la semana
+        val dayEntities = routine.workoutDays.map { day ->
+            WorkoutDayEntity(
+                id          = day.id,
+                routineId   = routine.id,
+                dayName     = day.dayName,
+                dayOrder    = day.dayOrder,
+                isRestDay   = if (day.isRestDay) 1 else 0,
+                muscleFocus = day.muscleFocus
+            )
+        }
+        routineDao.insertWorkoutDays(dayEntities)
+
+        // 4. Insertamos todos los ejercicios de todos los días
+        val exerciseEntities = routine.workoutDays.flatMap { day ->
+            day.exercises.mapIndexed { index, exercise ->
+                ExerciseAssignmentEntity(
+                    id            = exercise.id,
+                    workoutDayId  = day.id,
+                    nameEs        = exercise.name,
+                    nameEn        = exercise.nameEn,
+                    muscleGroup   = exercise.muscleGroup,
+                    sets          = exercise.sets,
+                    reps          = exercise.reps,
+                    restSeconds   = exercise.restSeconds,
+                    orderInDay    = index,
+                    notes         = exercise.notes
+                )
+            }
+        }
+        routineDao.insertExercises(exerciseEntities)
+
+        // 5. Limpiamos rutinas viejas inactivas para no acumular basura
+        routineDao.deleteInactiveRoutines(userUid)
+    }
+
+    // ── getActiveRoutineFlow — Flow para que la UI observe cambios ────────
+    override fun getActiveRoutineFlow(userUid: String): Flow<Routine?> =
+        routineDao.getActiveRoutineFlow(userUid).map { entity ->
+            entity?.let { buildRoutineFromEntity(it) }
+        }
+
+    // ── getActiveRoutine — lectura única para el Splash ───────────────────
+    override suspend fun getActiveRoutine(userUid: String): Routine? {
+        val entity = routineDao.getActiveRoutine(userUid) ?: return null
+        return buildRoutineFromEntity(entity)
+    }
+
+    // ── Reconstruye el objeto Routine completo desde las 3 tablas de Room ─
+    private suspend fun buildRoutineFromEntity(entity: RoutineEntity): Routine {
+        val dayEntities = routineDao.getWorkoutDays(entity.id)
+
+        val workoutDays = dayEntities.map { dayEntity ->
+            val exerciseEntities = routineDao.getExercisesForDay(dayEntity.id)
+
+            val exercises = exerciseEntities.map { ex ->
+                Exercise(
+                    id          = ex.id,
+                    name        = ex.nameEs,
+                    nameEn      = ex.nameEn,
+                    muscleGroup = ex.muscleGroup,
+                    sets        = ex.sets,
+                    reps        = ex.reps,
+                    restSeconds = ex.restSeconds,
+                    notes       = ex.notes
+                )
+            }
+
+            WorkoutDay(
+                id          = dayEntity.id,
+                dayName     = dayEntity.dayName,
+                dayOrder    = dayEntity.dayOrder,
+                isRestDay   = dayEntity.isRestDay == 1,
+                muscleFocus = dayEntity.muscleFocus,
+                exercises   = exercises
+            )
+        }
+
+        return Routine(
+            id          = entity.id,
+            goal        = entity.goal,
+            level       = entity.level,
+            daysPerWeek = entity.daysPerWeek,
+            workoutDays = workoutDays
+        )
+    }
+
+    override suspend fun deactivateActiveRoutine(userUid: String) {
+        routineDao.deactivateAllRoutines(userUid)
+    }
+
+    // ── parseRoutineFromJson — sin cambios ────────────────────────────────
     private fun parseRoutineFromJson(json: String, userProfile: UserProfile): Routine {
         val gson = Gson()
         val mapType = object : TypeToken<Map<String, Any>>() {}.type
         val rootMap: Map<String, Any> = gson.fromJson(json, mapType)
-
         val workoutDaysRaw = rootMap["workoutDays"] as? List<*> ?: emptyList<Any>()
 
         val workoutDays = workoutDaysRaw.mapIndexed { index, dayRaw ->
             val day = dayRaw as? Map<*, *> ?: return@mapIndexed null
-
             val exercisesRaw = day["exercises"] as? List<*> ?: emptyList<Any>()
-
             val exercises = exercisesRaw.mapIndexed { _, exRaw ->
                 val ex = exRaw as? Map<*, *> ?: return@mapIndexed null
                 Exercise(
                     id          = UUID.randomUUID().toString(),
                     name        = ex["name"]        as? String ?: "",
-                    nameEn      = ex["nameEn"]      as? String ?: "",  // ← nombre en inglés
+                    nameEn      = ex["nameEn"]      as? String ?: "",
                     muscleGroup = ex["muscleGroup"] as? String ?: "",
                     sets        = (ex["sets"]        as? Double)?.toInt() ?: 3,
                     reps        = ex["reps"]        as? String ?: "10",
