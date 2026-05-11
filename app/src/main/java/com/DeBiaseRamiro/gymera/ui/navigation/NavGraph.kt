@@ -22,6 +22,7 @@ import com.DeBiaseRamiro.gymera.ui.screens.splash.SplashScreen
 import com.DeBiaseRamiro.gymera.ui.shared.SharedRoutineViewModel
 import androidx.navigation.navArgument
 import com.DeBiaseRamiro.gymera.ui.screens.exercisedetail.ExerciseDetailScreen
+import com.DeBiaseRamiro.gymera.ui.screens.search.SearchScreen
 
 object Routes {
     const val SPLASH          = "splash"
@@ -243,8 +244,14 @@ fun NavGraph(isUserLoggedIn: Boolean) {
 
 
             // ── Search (feature/search) ───────────────────────────────────
+            // En NavGraph.kt — reemplazá el composable de SEARCH
+
             composable(Routes.SEARCH) {
-                // TODO: SearchScreen()
+                SearchScreen(
+                    onExerciseClick = { route ->
+                        navController.navigate(route)
+                    }
+                )
             }
         }
     }

@@ -162,28 +162,26 @@ fun ExerciseDetailScreen(
 
                         // ── CHIPS DE SERIES / REPS / DESCANSO ────────────────────
                         // Mismos chips que en DayDetailScreen para consistencia visual
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            ExerciseChip(label = "${state.sets} series")
-                            ExerciseChip(label = "${state.reps} reps")
-                            ExerciseChip(label = "${state.restSeconds}s descanso")
+
+                        // Solo mostramos los chips de rutina si el ejercicio viene de una rutina
+                        // (sets > 0 significa que viene de DayDetailScreen, no del buscador)
+                        if (state.sets > 0) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                ExerciseChip(label = "${state.sets} series")
+                                ExerciseChip(label = "${state.reps} reps")
+                                ExerciseChip(label = "${state.restSeconds}s descanso")
+                            }
                         }
 
-                        // ── INFORMACIÓN DEL EJERCICIO ─────────────────────────────
-                        ExerciseInfoCard(
-                            primaryMuscles = state.dto.primaryMuscles,
-                            secondaryMuscles = state.dto.secondaryMuscles,
-                            equipment = state.dto.equipment,
-                            level = state.dto.level,
-                            category = state.dto.category
-                        )
+                        // ── INFORMACIÓN DEL EJERCICIO ───────────────────────────── lo saque
 
                         // ── NOTAS DE LA IA ────────────────────────────────────────
                         // Solo mostramos si Gemini generó alguna nota para este ejercicio
                         if (state.notes.isNotBlank()) {
                             NoteCard(notes = state.notes)
                         }
+
+
 
                         // ── INSTRUCCIONES PASO A PASO ─────────────────────────────
                         // Vienen del JSON de free-exercise-db como lista de strings

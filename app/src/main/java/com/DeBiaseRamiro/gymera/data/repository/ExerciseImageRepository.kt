@@ -146,4 +146,24 @@ class ExerciseImageRepository @Inject constructor(
             .maxByOrNull { (_, count) -> count }
             ?.first
     }
+
+
+    // Parte del SEARCH
+
+    // Devuelve la lista completa para que SearchViewModel pueda filtrar en memoria.
+    // Usa el mismo cache de 3 niveles — si ya está en RAM no toca nada.
+    suspend fun getAllExercises(): List<FreeExerciseDto> {
+        return getExerciseList() ?: emptyList()
+    }
+
+    // Devuelve los grupos musculares únicos para el desplegable de filtros.
+    // Los extrae de primaryMuscles de todos los ejercicios, los ordena alfabéticamente.
+    suspend fun getMuscleGroups(): List<String> {
+        return getExerciseList()
+            ?.flatMap { it.primaryMuscles }
+            ?.map { it.lowercase().replaceFirstChar { c -> c.uppercase() } }
+            ?.distinct()
+            ?.sorted()
+            ?: emptyList()
+    }
 }
