@@ -9,6 +9,8 @@ import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
+import com.DeBiaseRamiro.gymera.data.repository.FirestoreRepositoryImpl
+import com.DeBiaseRamiro.gymera.domain.repository.FirestoreRepository
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -25,4 +27,7 @@ abstract class RepositoryModule {
     abstract fun bindRoutineRepository(
         impl: RoutineRepositoryImpl
     ): RoutineRepository
+
+    @Binds @Singleton
+    abstract fun bindFirestoreRepository(impl: FirestoreRepositoryImpl): FirestoreRepository
 }

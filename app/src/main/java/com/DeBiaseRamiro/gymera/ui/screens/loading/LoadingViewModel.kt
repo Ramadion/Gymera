@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.DeBiaseRamiro.gymera.domain.model.Routine
 import com.DeBiaseRamiro.gymera.domain.model.UserProfile
+import com.DeBiaseRamiro.gymera.domain.repository.FirestoreRepository
 import com.DeBiaseRamiro.gymera.domain.repository.RoutineRepository
 import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -21,7 +22,8 @@ sealed class LoadingUiState {
 @HiltViewModel
 class LoadingViewModel @Inject constructor(
     private val routineRepository: RoutineRepository,
-    private val firebaseAuth: FirebaseAuth   // para obtener el UID del usuario
+    private val firestoreRepository: FirestoreRepository,
+    private val firebaseAuth: FirebaseAuth
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<LoadingUiState>(LoadingUiState.Loading)
@@ -31,16 +33,30 @@ class LoadingViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = LoadingUiState.Loading
             try {
-                // 1. Generamos la rutina via Gemini (igual que antes)
-                val routine = routineRepository.generateRoutine(userProfile)
-
-                // 2. NUEVO: guardamos en Room para persistencia offline
-                // El UID del usuario autenticado es necesario para asociar la rutina
                 val uid = firebaseAuth.currentUser?.uid
                     ?: throw Exception("Usuario no autenticado")
+
+                // 1. Generamos via Gemini
+                val routine = routineRepository.generateRoutine(userProfile)
+
+                // 2. Guardamos en Room (fuente de verdad local)
                 routineRepository.saveRoutine(routine, uid)
 
-                // 3. Notificamos éxito a la UI (igual que antes)
+                // 3. Sincronizamos con Firestore en background
+                // launch separado para que si falla Firestore no afecte al usuario
+                launch {
+                    try {
+                        android.util.Log.d("GYM_FIRESTORE", "Iniciando sync para uid: $uid")
+                        firestoreRepository.syncRoutineToCloud(routine, uid)
+                        android.util.Log.d("GYM_FIRESTORE", "Sync exitoso")
+                    } catch (e: Exception) {
+                        // Solo logueamos — Room ya tiene la rutina, el usuario no nota nada
+                        android.util.Log.w("GYM_FIRESTORE", "Sync falló, se reintentará: ${e.message}")
+                        android.util.Log.e("GYM_FIRESTORE", "Sync falló: ${e.message}", e)
+                    }
+                }
+
+                // 4. Notificamos éxito — no esperamos a que termine Firestore
                 _uiState.value = LoadingUiState.Success(routine)
 
             } catch (e: Exception) {

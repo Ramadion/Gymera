@@ -22,6 +22,7 @@ import com.DeBiaseRamiro.gymera.ui.screens.splash.SplashScreen
 import com.DeBiaseRamiro.gymera.ui.shared.SharedRoutineViewModel
 import androidx.navigation.navArgument
 import com.DeBiaseRamiro.gymera.ui.screens.exercisedetail.ExerciseDetailScreen
+import com.DeBiaseRamiro.gymera.ui.screens.profile.ProfileScreen
 import com.DeBiaseRamiro.gymera.ui.screens.search.SearchScreen
 
 object Routes {
@@ -34,6 +35,8 @@ object Routes {
     const val EXERCISE_DETAIL = "exercise_detail/{exerciseId}"
     const val SEARCH          = "search"
 
+    const val PROFILE         = "profile"
+
     fun dayDetail(dayId: String)           = "day_detail/$dayId"
     fun exerciseDetail(exerciseId: String) = "exercise_detail/$exerciseId"
 }
@@ -44,7 +47,8 @@ object Routes {
  */
 private val bottomNavRoutes = setOf(
     Routes.ROUTINE,
-    Routes.SEARCH
+    Routes.SEARCH,
+    "profile"
 )
 
 @Composable
@@ -244,12 +248,25 @@ fun NavGraph(isUserLoggedIn: Boolean) {
 
 
             // ── Search (feature/search) ───────────────────────────────────
-            // En NavGraph.kt — reemplazá el composable de SEARCH
 
             composable(Routes.SEARCH) {
                 SearchScreen(
                     onExerciseClick = { route ->
                         navController.navigate(route)
+                    }
+                )
+            }
+
+            // ── profile (feature/firestore-firebase) ───────────────────────────────────
+
+            composable(Routes.PROFILE) {
+                ProfileScreen(
+                    onSignOut = {
+                        // Al cerrar sesión limpiamos el back stack completo
+                        // y mandamos al login sin posibilidad de volver atrás
+                        navController.navigate(Routes.LOGIN) {
+                            popUpTo(0) { inclusive = true }
+                        }
                     }
                 )
             }

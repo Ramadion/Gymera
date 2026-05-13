@@ -31,11 +31,16 @@ fun LoginScreen(
 
     // Cuando el login es exitoso, navegamos fuera de esta pantalla
     LaunchedEffect(uiState) {
-        if (uiState is LoginUiState.Success) {
-            // Por ahora siempre vamos al formulario (el usuario acaba de registrarse)
-            // Más adelante verificaremos si ya tiene rutina en Firestore
-            onNavigateToForm()
-            viewModel.resetState()
+        when (uiState) {
+            is LoginUiState.GoToRoutine -> {
+                onNavigateToRoutine()
+                viewModel.resetState()
+            }
+            is LoginUiState.GoToForm -> {
+                onNavigateToForm()
+                viewModel.resetState()
+            }
+            else -> {}
         }
     }
 

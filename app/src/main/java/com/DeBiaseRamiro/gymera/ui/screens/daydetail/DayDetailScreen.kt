@@ -229,19 +229,6 @@ private fun ExerciseCard(
             Text(text = "›", fontSize = 24.sp, color = MutedGray)
         }
 
-        // Notas de la IA — se muestran debajo del Row solo si existen
-        if (exercise.notes.isNotBlank()) {
-            HorizontalDivider(
-                modifier = Modifier.padding(horizontal = 12.dp),
-                color = SurfaceVariant
-            )
-            Text(
-                text = "💡 ${exercise.notes}",
-                fontSize = 12.sp,
-                color = MutedGray,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-            )
-        }
     }
 }
 

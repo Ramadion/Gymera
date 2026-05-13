@@ -10,10 +10,12 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import com.DeBiaseRamiro.gymera.domain.repository.FirestoreRepository
 
 @HiltViewModel
 class SharedRoutineViewModel @Inject constructor(
     private val routineRepository: RoutineRepository,
+    private val firestoreRepository: FirestoreRepository,
     private val firebaseAuth: FirebaseAuth
 ) : ViewModel() {
 
@@ -41,12 +43,21 @@ class SharedRoutineViewModel @Inject constructor(
     fun setUserProfile(profile: UserProfile) { _pendingUserProfile.value = profile }
     fun clearUserProfile()                   { _pendingUserProfile.value = null }
 
-    // Desactiva la rutina en Room — el Flow de currentRoutine emitirá null
-    // automáticamente y la UI navegará al formulario sola
+    // En SharedRoutineViewModel.kt — reemplazá solo clearRoutine()
+
     fun clearRoutine() {
         viewModelScope.launch {
             val uid = userUid ?: return@launch
+            // Desactivamos en Room — el Flow emite null y la UI navega sola
             routineRepository.deactivateActiveRoutine(uid)
+            // Desactivamos en Firestore en background — si falla no importa
+            launch {
+                try {
+                    firestoreRepository.deactivateCloudRoutine(uid)
+                } catch (e: Exception) {
+                    android.util.Log.w("GYM_FIRESTORE", "Error desactivando en cloud: ${e.message}")
+                }
+            }
         }
     }
 }
