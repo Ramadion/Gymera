@@ -17,8 +17,21 @@ class FirestoreRepositoryImpl @Inject constructor(
     // Guarda la rutina completa en Firestore bajo users/{uid}/routines/{routineId}
     // y actualiza el flag hasActiveRoutine en el documento del usuario
     override suspend fun syncRoutineToCloud(routine: Routine, userUid: String) {
-        // Serializamos la rutina a un Map que Firestore puede guardar
-        // Firestore no soporta data classes directamente — necesita Maps
+        // Borramos TODAS las rutinas anteriores de Firestore
+        val allPrevious = firestore
+            .collection("users")
+            .document(userUid)
+            .collection("routines")
+            .get()
+            .await()
+
+        allPrevious.documents.forEach { doc ->
+            if (doc.id != routine.id) {
+                doc.reference.delete().await()
+            }
+        }
+
+        // Subimos la nueva rutina
         val routineMap = mapOf(
             "id"          to routine.id,
             "goal"        to routine.goal,
@@ -26,8 +39,6 @@ class FirestoreRepositoryImpl @Inject constructor(
             "daysPerWeek" to routine.daysPerWeek,
             "generatedAt" to System.currentTimeMillis(),
             "isActive"    to true,
-            // Los días y ejercicios van embebidos como array de maps
-            // Es más simple que subcollections para este caso de uso
             "workoutDays" to routine.workoutDays.map { day ->
                 mapOf(
                     "id"          to day.id,
@@ -35,37 +46,22 @@ class FirestoreRepositoryImpl @Inject constructor(
                     "dayOrder"    to day.dayOrder,
                     "isRestDay"   to day.isRestDay,
                     "muscleFocus" to day.muscleFocus,
-                    "exercises"   to day.exercises.map { exercise ->
+                    "exercises"   to day.exercises.map { ex ->
                         mapOf(
-                            "id"          to exercise.id,
-                            "name"        to exercise.name,
-                            "nameEn"      to exercise.nameEn,
-                            "muscleGroup" to exercise.muscleGroup,
-                            "sets"        to exercise.sets,
-                            "reps"        to exercise.reps,
-                            "restSeconds" to exercise.restSeconds,
-                            "notes"       to exercise.notes
+                            "id"          to ex.id,
+                            "name"        to ex.name,
+                            "nameEn"      to ex.nameEn,
+                            "muscleGroup" to ex.muscleGroup,
+                            "sets"        to ex.sets,
+                            "reps"        to ex.reps,
+                            "restSeconds" to ex.restSeconds,
+                            "notes"       to ex.notes
                         )
                     }
                 )
             }
         )
 
-        // Primero marcamos todas las rutinas anteriores como inactivas
-        // Firestore no tiene UPDATE masivo, así que buscamos la activa y la pisamos
-        val previousActive = firestore
-            .collection("users")
-            .document(userUid)
-            .collection("routines")
-            .whereEqualTo("isActive", true)
-            .get()
-            .await()
-
-        previousActive.documents.forEach { doc ->
-            doc.reference.update("isActive", false).await()
-        }
-
-        // Guardamos la nueva rutina con su ID como document ID
         firestore
             .collection("users")
             .document(userUid)
@@ -74,11 +70,11 @@ class FirestoreRepositoryImpl @Inject constructor(
             .set(routineMap)
             .await()
 
-        // Actualizamos el flag en el documento del usuario
+        // Actualizamos hasActiveRoutine en el documento del usuario
         firestore
             .collection("users")
             .document(userUid)
-            .set(mapOf("hasActiveRoutine" to true), SetOptions.merge())
+            .update("hasActiveRoutine", true)
             .await()
     }
 

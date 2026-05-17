@@ -49,4 +49,8 @@ interface RoutineDao {
     // Borra rutinas inactivas para no acumular basura en la DB
     @Query("DELETE FROM routine WHERE userUid = :uid AND isActive = 0")
     suspend fun deleteInactiveRoutines(uid: String)
+
+    // RoutineDao.kt — agregar
+    @Query("DELETE FROM routine WHERE userUid = :uid")
+    suspend fun deleteAllRoutines(uid: String)
 }

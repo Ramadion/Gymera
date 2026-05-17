@@ -103,17 +103,16 @@ class RoutineRepositoryImpl @Inject constructor(
 
     // ── saveRoutine — guarda rutina completa en Room ──────────────────────
     override suspend fun saveRoutine(routine: Routine, userUid: String) {
-        // 1. Desactivamos cualquier rutina activa anterior del usuario
-        routineDao.deactivateAllRoutines(userUid)
+        // Borramos TODAS las rutinas anteriores — solo existe 1 a la vez
+        routineDao.deleteAllRoutines(userUid)
 
-        // 2. Insertamos la nueva rutina como activa
         routineDao.insertRoutine(
             RoutineEntity(
                 id              = routine.id,
                 userUid         = userUid,
                 goal            = routine.goal,
                 daysPerWeek     = routine.daysPerWeek,
-                sessionDuration = 0,   // no está en el modelo de dominio, valor default
+                sessionDuration = 0,
                 level           = routine.level,
                 limitations     = "",
                 generatedAt     = System.currentTimeMillis(),
@@ -121,7 +120,6 @@ class RoutineRepositoryImpl @Inject constructor(
             )
         )
 
-        // 3. Insertamos los días de la semana
         val dayEntities = routine.workoutDays.map { day ->
             WorkoutDayEntity(
                 id          = day.id,
@@ -134,27 +132,23 @@ class RoutineRepositoryImpl @Inject constructor(
         }
         routineDao.insertWorkoutDays(dayEntities)
 
-        // 4. Insertamos todos los ejercicios de todos los días
         val exerciseEntities = routine.workoutDays.flatMap { day ->
             day.exercises.mapIndexed { index, exercise ->
                 ExerciseAssignmentEntity(
-                    id            = exercise.id,
-                    workoutDayId  = day.id,
-                    nameEs        = exercise.name,
-                    nameEn        = exercise.nameEn,
-                    muscleGroup   = exercise.muscleGroup,
-                    sets          = exercise.sets,
-                    reps          = exercise.reps,
-                    restSeconds   = exercise.restSeconds,
-                    orderInDay    = index,
-                    notes         = exercise.notes
+                    id           = exercise.id,
+                    workoutDayId = day.id,
+                    nameEs       = exercise.name,
+                    nameEn       = exercise.nameEn,
+                    muscleGroup  = exercise.muscleGroup,
+                    sets         = exercise.sets,
+                    reps         = exercise.reps,
+                    restSeconds  = exercise.restSeconds,
+                    orderInDay   = index,
+                    notes        = exercise.notes
                 )
             }
         }
         routineDao.insertExercises(exerciseEntities)
-
-        // 5. Limpiamos rutinas viejas inactivas para no acumular basura
-        routineDao.deleteInactiveRoutines(userUid)
     }
 
     // ── getActiveRoutineFlow — Flow para que la UI observe cambios ────────

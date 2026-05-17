@@ -23,12 +23,11 @@ class AuthRepositoryImpl @Inject constructor(
 
         // Guardamos/actualizamos el perfil en Firestore
         val userDoc = mapOf(
-            "uid"              to user.uid,
-            "displayName"      to (user.displayName ?: ""),
-            "email"            to (user.email ?: ""),
-            "photoUrl"         to (user.photoUrl?.toString() ?: ""),
-            "lastLogin"        to System.currentTimeMillis(),
-            "hasActiveRoutine" to false
+            "uid"         to user.uid,
+            "displayName" to (user.displayName ?: ""),
+            "email"       to (user.email ?: ""),
+            "photoUrl"    to (user.photoUrl?.toString() ?: ""),
+            "lastLogin"   to System.currentTimeMillis()
         )
 
         // merge = true para no pisar datos existentes (como hasActiveRoutine)

@@ -24,6 +24,10 @@ import androidx.navigation.navArgument
 import com.DeBiaseRamiro.gymera.ui.screens.exercisedetail.ExerciseDetailScreen
 import com.DeBiaseRamiro.gymera.ui.screens.profile.ProfileScreen
 import com.DeBiaseRamiro.gymera.ui.screens.search.SearchScreen
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 
 object Routes {
     const val SPLASH          = "splash"
@@ -120,7 +124,6 @@ fun NavGraph(isUserLoggedIn: Boolean) {
                 )
             }
 
-            // ── Login ─────────────────────────────────────────────────────
             composable(Routes.LOGIN) {
                 LoginScreen(
                     onNavigateToForm = {
@@ -170,13 +173,24 @@ fun NavGraph(isUserLoggedIn: Boolean) {
             // ── Rutina Semanal ────────────────────────────────────────────
             composable(Routes.ROUTINE) {
                 val routine = currentRoutine
-                if (routine == null) {
+
+                // Esperamos 500ms antes de decidir que no hay rutina.
+                // Esto le da tiempo a Room de emitir el primer valor del Flow
+                // sin mandar al usuario al Form prematuramente.
+                var readyToRedirect by remember { mutableStateOf(false) }
+
+                LaunchedEffect(Unit) {
+                    kotlinx.coroutines.delay(500L)
+                    readyToRedirect = true
+                }
+
+                if (routine == null && readyToRedirect) {
                     LaunchedEffect(Unit) {
                         navController.navigate(Routes.FORM_IA) {
                             popUpTo(Routes.ROUTINE) { inclusive = true }
                         }
                     }
-                } else {
+                } else if (routine != null) {
                     RoutineScreen(
                         routine = routine,
                         onDaySelected = { dayId ->
@@ -190,6 +204,7 @@ fun NavGraph(isUserLoggedIn: Boolean) {
                         }
                     )
                 }
+                // Si routine == null && !readyToRedirect: no hacemos nada, esperamos
             }
 
             // ── Day Detail ────────────────────────────────────────────────

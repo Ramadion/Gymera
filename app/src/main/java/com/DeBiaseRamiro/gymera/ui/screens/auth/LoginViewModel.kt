@@ -35,9 +35,11 @@ class LoginViewModel @Inject constructor(
             try {
                 val user = authRepository.signInWithGoogle(idToken)
                     ?: throw Exception("No se pudo autenticar")
+                android.util.Log.d("GYM_NAV", "Usuario autenticado: ${user.uid}")
 
                 // Nivel 1: verificamos Room (instantáneo)
                 val localRoutine = routineRepository.getActiveRoutine(user.uid)
+                android.util.Log.d("GYM_NAV", "Room local routine: $localRoutine")
                 if (localRoutine != null) {
                     _uiState.value = LoginUiState.GoToRoutine
                     return@launch
@@ -46,6 +48,7 @@ class LoginViewModel @Inject constructor(
                 // Nivel 2: Room vacío — buscamos en Firestore
                 // (caso: cerró sesión, volvió a logearse, Room fue limpiado)
                 val cloudRoutine = firestoreRepository.fetchRoutineFromCloud(user.uid)
+                android.util.Log.d("GYM_NAV", "Firestore cloud routine: $cloudRoutine")
                 if (cloudRoutine != null) {
                     // Bajamos la rutina a Room para disponibilidad offline
                     routineRepository.saveRoutine(cloudRoutine, user.uid)
