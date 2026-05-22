@@ -21,8 +21,34 @@ class RoutineRepositoryImpl @Inject constructor(
     private val routineDao: RoutineDao
 ) : RoutineRepository {
 
-    // ── generateRoutine — sin cambios respecto a tu versión actual ────────
-    override suspend fun generateRoutine(userProfile: UserProfile): Routine {
+    override suspend fun generateRoutine(
+        userProfile: UserProfile,
+        physicalProfile: UserPhysicalProfile?
+    ): Routine {
+
+        // Construimos la sección de datos físicos solo si el usuario los completó
+        // Cada campo se agrega individualmente para no enviar datos vacíos a Gemini
+        val physicalSection = buildString {
+            if (physicalProfile != null) {
+                val hasAnyData = physicalProfile.age > 0 ||
+                        physicalProfile.weightKg > 0f ||
+                        physicalProfile.heightCm > 0
+
+                if (hasAnyData) {
+                    appendLine("Datos físicos del usuario (tenerlos en cuenta para personalizar la rutina):")
+                    if (physicalProfile.age > 0)
+                        appendLine("- Edad: ${physicalProfile.age} años")
+                    if (physicalProfile.weightKg > 0f)
+                        appendLine("- Peso: ${physicalProfile.weightKg} kg")
+                    if (physicalProfile.heightCm > 0)
+                        appendLine("- Altura: ${physicalProfile.heightCm} cm")
+                    if (physicalProfile.gender.isNotBlank() &&
+                        physicalProfile.gender != "No especificado")
+                        appendLine("- Género: ${physicalProfile.gender}")
+                }
+            }
+        }
+
         val prompt = """
             Eres un entrenador personal experto. Genera una rutina de entrenamiento semanal
             personalizada basada en estos datos del usuario:
@@ -31,7 +57,7 @@ class RoutineRepositoryImpl @Inject constructor(
             - Duracion por sesion: ${userProfile.sessionDuration} minutos
             - Nivel de experiencia: ${userProfile.level}
             - Lesiones o limitaciones: ${userProfile.limitations.ifEmpty { "Ninguna" }}
-
+            ${physicalSection.ifBlank { "" }}
             REGLAS ESTRICTAS que debes seguir sin excepcion:
             1. El JSON debe tener EXACTAMENTE 7 objetos en "workoutDays", uno por cada dia
                de la semana: Lunes (dayOrder 1), Martes (2), Miercoles (3), Jueves (4),
@@ -101,7 +127,6 @@ class RoutineRepositoryImpl @Inject constructor(
         return parseRoutineFromJson(cleanJson, userProfile)
     }
 
-    // ── saveRoutine — guarda rutina completa en Room ──────────────────────
     override suspend fun saveRoutine(routine: Routine, userUid: String) {
         // Borramos TODAS las rutinas anteriores — solo existe 1 a la vez
         routineDao.deleteAllRoutines(userUid)
@@ -138,7 +163,9 @@ class RoutineRepositoryImpl @Inject constructor(
                     id           = exercise.id,
                     workoutDayId = day.id,
                     nameEs       = exercise.name,
-                    nameEn       = exercise.nameEn,
+                    nameEn       = exercise.nameEn
+                        .replace(oldValue = "-", newValue = " ")
+                        .replace(oldValue = "/", newValue = " "),
                     muscleGroup  = exercise.muscleGroup,
                     sets         = exercise.sets,
                     reps         = exercise.reps,
@@ -151,19 +178,20 @@ class RoutineRepositoryImpl @Inject constructor(
         routineDao.insertExercises(exerciseEntities)
     }
 
-    // ── getActiveRoutineFlow — Flow para que la UI observe cambios ────────
     override fun getActiveRoutineFlow(userUid: String): Flow<Routine?> =
         routineDao.getActiveRoutineFlow(userUid).map { entity ->
             entity?.let { buildRoutineFromEntity(it) }
         }
 
-    // ── getActiveRoutine — lectura única para el Splash ───────────────────
     override suspend fun getActiveRoutine(userUid: String): Routine? {
         val entity = routineDao.getActiveRoutine(userUid) ?: return null
         return buildRoutineFromEntity(entity)
     }
 
-    // ── Reconstruye el objeto Routine completo desde las 3 tablas de Room ─
+    override suspend fun deactivateActiveRoutine(userUid: String) {
+        routineDao.deactivateAllRoutines(userUid)
+    }
+
     private suspend fun buildRoutineFromEntity(entity: RoutineEntity): Routine {
         val dayEntities = routineDao.getWorkoutDays(entity.id)
 
@@ -202,11 +230,6 @@ class RoutineRepositoryImpl @Inject constructor(
         )
     }
 
-    override suspend fun deactivateActiveRoutine(userUid: String) {
-        routineDao.deactivateAllRoutines(userUid)
-    }
-
-    // ── parseRoutineFromJson — sin cambios ────────────────────────────────
     private fun parseRoutineFromJson(json: String, userProfile: UserProfile): Routine {
         val gson = Gson()
         val mapType = object : TypeToken<Map<String, Any>>() {}.type

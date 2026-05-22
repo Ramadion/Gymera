@@ -18,6 +18,7 @@ import javax.inject.Singleton
 import androidx.room.Room
 import com.DeBiaseRamiro.gymera.data.local.dao.ExerciseCacheDao
 import com.DeBiaseRamiro.gymera.data.local.dao.RoutineDao
+import com.DeBiaseRamiro.gymera.data.local.dao.UserProfileDao
 import com.DeBiaseRamiro.gymera.data.local.database.GymeraDatabase
 import dagger.hilt.android.qualifiers.ApplicationContext
 
@@ -81,7 +82,9 @@ object AppModule {
             context,
             GymeraDatabase::class.java,
             "gymera_database"   // nombre del archivo .db en el dispositivo
-        ).build()
+        )
+        .fallbackToDestructiveMigration()
+        .build()
 
     @Provides
     @Singleton
@@ -90,6 +93,10 @@ object AppModule {
     @Provides
     @Singleton
     fun provideExerciseCacheDao(db: GymeraDatabase): ExerciseCacheDao = db.exerciseCacheDao()
+
+    @Provides
+    @Singleton
+    fun provideUserProfileDao(db: GymeraDatabase): UserProfileDao = db.userProfileDao()
 
 
 }

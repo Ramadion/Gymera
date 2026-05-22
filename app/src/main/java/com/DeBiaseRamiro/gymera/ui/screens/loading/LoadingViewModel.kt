@@ -2,6 +2,7 @@ package com.DeBiaseRamiro.gymera.ui.screens.loading
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.DeBiaseRamiro.gymera.data.local.dao.UserProfileDao
 import com.DeBiaseRamiro.gymera.domain.model.Routine
 import com.DeBiaseRamiro.gymera.domain.model.UserProfile
 import com.DeBiaseRamiro.gymera.domain.repository.FirestoreRepository
@@ -23,7 +24,8 @@ sealed class LoadingUiState {
 class LoadingViewModel @Inject constructor(
     private val routineRepository: RoutineRepository,
     private val firestoreRepository: FirestoreRepository,
-    private val firebaseAuth: FirebaseAuth
+    private val firebaseAuth: FirebaseAuth,
+    private val userProfileDao: UserProfileDao
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<LoadingUiState>(LoadingUiState.Loading)

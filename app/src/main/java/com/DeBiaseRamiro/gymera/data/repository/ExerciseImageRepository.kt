@@ -6,6 +6,7 @@ import com.DeBiaseRamiro.gymera.data.remote.api.FreeExerciseDbApi
 import com.DeBiaseRamiro.gymera.data.remote.dto.FreeExerciseDto
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.log
 
 @Singleton
 class ExerciseImageRepository @Inject constructor(
@@ -25,8 +26,10 @@ class ExerciseImageRepository @Inject constructor(
     suspend fun getImageUrl(nameEn: String): String? {
         if (nameEn.isBlank()) return null
         val cleanName = nameEn.replace("+", " ").trim().lowercase()
+        android.util.Log.d("GYM_match", "nombre en limpio: $cleanName")
         val exercises = getExerciseList() ?: return null
         val match = findBestMatch(cleanName, exercises) ?: return null
+        android.util.Log.d("GYM_match", "lo mas parecido $match")
         return match.images.firstOrNull()?.let { IMAGE_BASE_URL + it }
     }
 
@@ -132,7 +135,9 @@ class ExerciseImageRepository @Inject constructor(
         val queryWords = query.split(" ")
             .filter { it.length > 2 && it !in stopWords }
             .toSet()
+        android.util.Log.d("GYM_QUERY", "Porque se rompe, $queryWords")
         if (queryWords.size < 2) return null
+
 
         return exercises
             .map { exercise ->
