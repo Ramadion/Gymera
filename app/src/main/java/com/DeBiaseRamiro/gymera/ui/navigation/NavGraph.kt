@@ -28,6 +28,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
 
 object Routes {
     const val SPLASH          = "splash"
@@ -174,37 +179,61 @@ fun NavGraph(isUserLoggedIn: Boolean) {
             composable(Routes.ROUTINE) {
                 val routine = currentRoutine
 
-                // Esperamos 500ms antes de decidir que no hay rutina.
-                // Esto le da tiempo a Room de emitir el primer valor del Flow
-                // sin mandar al usuario al Form prematuramente.
-                var readyToRedirect by remember { mutableStateOf(false) }
+                // Estado que controla si ya esperamos suficiente para saber que no hay rutina
+                var shouldRedirectToForm by remember { mutableStateOf(false) }
 
-                LaunchedEffect(Unit) {
-                    kotlinx.coroutines.delay(500L)
-                    readyToRedirect = true
+                // Cuando routine es null, esperamos 600ms antes de decidir que no hay rutina.
+                // Si Room emite el valor en ese tiempo (casi siempre < 100ms), cancela el redirect.
+                LaunchedEffect(routine) {
+                    if (routine == null) {
+                        kotlinx.coroutines.delay(600L)
+                        // Después del delay rechequeamos — si sigue null, redirigimos
+                        shouldRedirectToForm = true
+                    } else {
+                        // Llegó la rutina — cancelamos cualquier redirect pendiente
+                        shouldRedirectToForm = false
+                    }
                 }
 
-                if (routine == null && readyToRedirect) {
-                    LaunchedEffect(Unit) {
-                        navController.navigate(Routes.FORM_IA) {
-                            popUpTo(Routes.ROUTINE) { inclusive = true }
-                        }
+                when {
+                    routine != null -> {
+                        RoutineScreen(
+                            routine      = routine,
+                            onDaySelected = { dayId ->
+                                navController.navigate(Routes.dayDetail(dayId))
+                            },
+                            onGenerateNew = {
+                                sharedRoutineViewModel.clearRoutine()
+                                navController.navigate(Routes.FORM_IA) {
+                                    popUpTo(Routes.ROUTINE) { inclusive = true }
+                                }
+                            }
+                        )
                     }
-                } else if (routine != null) {
-                    RoutineScreen(
-                        routine = routine,
-                        onDaySelected = { dayId ->
-                            navController.navigate(Routes.dayDetail(dayId))
-                        },
-                        onGenerateNew = {
-                            sharedRoutineViewModel.clearRoutine()
+
+                    shouldRedirectToForm -> {
+                        // Solo llegamos acá si después de 600ms Room sigue sin rutina
+                        LaunchedEffect(Unit) {
                             navController.navigate(Routes.FORM_IA) {
                                 popUpTo(Routes.ROUTINE) { inclusive = true }
                             }
                         }
-                    )
+                    }
+
+                    else -> {
+                        // Mientras esperamos a Room — spinner en lugar de pantalla vacía
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(com.DeBiaseRamiro.gymera.ui.theme.BackgroundDark),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                color = com.DeBiaseRamiro.gymera.ui.theme.PurplePrimary
+                            )
+                        }
+                    }
                 }
-                // Si routine == null && !readyToRedirect: no hacemos nada, esperamos
             }
 
             // ── Day Detail ────────────────────────────────────────────────
