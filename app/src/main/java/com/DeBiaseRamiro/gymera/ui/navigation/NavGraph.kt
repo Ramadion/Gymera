@@ -20,7 +20,6 @@ import com.DeBiaseRamiro.gymera.ui.screens.loading.LoadingScreen
 import com.DeBiaseRamiro.gymera.ui.screens.routine.RoutineScreen
 import com.DeBiaseRamiro.gymera.ui.screens.splash.SplashScreen
 import com.DeBiaseRamiro.gymera.ui.shared.SharedRoutineViewModel
-import androidx.navigation.navArgument
 import com.DeBiaseRamiro.gymera.ui.screens.exercisedetail.ExerciseDetailScreen
 import com.DeBiaseRamiro.gymera.ui.screens.profile.ProfileScreen
 import com.DeBiaseRamiro.gymera.ui.screens.search.SearchScreen
@@ -43,51 +42,37 @@ object Routes {
     const val DAY_DETAIL      = "day_detail/{dayId}"
     const val EXERCISE_DETAIL = "exercise_detail/{exerciseId}"
     const val SEARCH          = "search"
-
     const val PROFILE         = "profile"
 
     fun dayDetail(dayId: String)           = "day_detail/$dayId"
     fun exerciseDetail(exerciseId: String) = "exercise_detail/$exerciseId"
 }
 
-/**
- * Rutas donde se muestra la BottomNavBar.
- * Todas las demás pantallas (splash, login, form, loading, detalle) la ocultan.
- */
 private val bottomNavRoutes = setOf(
     Routes.ROUTINE,
     Routes.SEARCH,
-    "profile"
+    Routes.PROFILE
 )
 
 @Composable
 fun NavGraph(isUserLoggedIn: Boolean) {
 
     val navController = rememberNavController()
-
     val sharedRoutineViewModel: SharedRoutineViewModel = hiltViewModel()
     val currentRoutine by sharedRoutineViewModel.currentRoutine.collectAsState()
 
-    // Observamos la ruta actual para saber qué ítem resaltar
-    // y si debemos mostrar la BottomNavBar
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
-
-    // La BottomNavBar solo se muestra en las pantallas principales
     val showBottomBar = currentRoute in bottomNavRoutes
 
     Scaffold(
         bottomBar = {
-            // Solo renderizamos la barra si corresponde a la ruta actual
             if (showBottomBar) {
                 BottomNavBar(
                     currentRoute = currentRoute,
                     onItemClick = { route ->
                         navController.navigate(route) {
-                            // Evitamos apilar la misma pantalla si ya estamos en ella
                             launchSingleTop = true
-                            // Al cambiar de tab, volvemos al inicio de ese tab
-                            // sin acumular el back stack
                             restoreState = true
                             popUpTo(Routes.ROUTINE) {
                                 saveState = true
@@ -102,15 +87,12 @@ fun NavGraph(isUserLoggedIn: Boolean) {
         NavHost(
             navController = navController,
             startDestination = Routes.SPLASH,
-            // El padding del Scaffold (espacio que ocupa la BottomNavBar)
-            // se lo pasamos al NavHost para que el contenido no quede tapado
             modifier = Modifier.padding(innerPadding)
         ) {
 
             // ── Splash ────────────────────────────────────────────────────
             composable(Routes.SPLASH) {
                 SplashScreen(
-                    // Ya no pasa isUserLoggedIn — el SplashViewModel lo maneja solo
                     onNavigateToLogin = {
                         navController.navigate(Routes.LOGIN) {
                             popUpTo(Routes.SPLASH) { inclusive = true }
@@ -129,6 +111,7 @@ fun NavGraph(isUserLoggedIn: Boolean) {
                 )
             }
 
+            // ── Login ─────────────────────────────────────────────────────
             composable(Routes.LOGIN) {
                 LoginScreen(
                     onNavigateToForm = {
@@ -162,13 +145,35 @@ fun NavGraph(isUserLoggedIn: Boolean) {
 
                 LoadingScreen(
                     userProfile = userProfile ?: UserProfile(),
-                    onRoutineGenerated = { _ ->
-                        // Ya NO llamamos setRoutine() — la rutina ya está en Room
-                        // y el Flow de SharedRoutineViewModel la emite automáticamente.
-                        // Solo limpiamos el perfil pendiente y navegamos.
+                    onRoutineGenerated = { routine ->
+                        // ── FIX PRINCIPAL ─────────────────────────────────────────
+                        // Establecemos la rutina de forma INMEDIATA en el StateFlow
+                        // ANTES de navegar. Esto garantiza que cuando el composable
+                        // de ROUTINE renderice por primera vez, currentRoutine ya
+                        // tiene el valor correcto — sin depender del timing de Room.
+                        //
+                        // Sin este setRoutine(), existía una race condition:
+                        //   1. saveRoutine() escribe en Room (IO dispatcher)
+                        //   2. navigate(ROUTINE) ocurre
+                        //   3. ROUTINE composable renderiza con currentRoutine = null
+                        //      (Room todavía no emitió al Flow del main thread)
+                        //   4. LaunchedEffect inicia timer de 600ms
+                        //   5. Si Room llega después de 600ms → redirige a Form
+                        //
+                        // Con setRoutine(), el paso 3 ya tiene el valor correcto.
+                        // Cuando Room emita el mismo valor (< 16ms después), la
+                        // actualización es idempotente.
+                        // ─────────────────────────────────────────────────────────
+                        sharedRoutineViewModel.setRoutine(routine)
                         sharedRoutineViewModel.clearUserProfile()
+
+                        // FIX secundario: popUpTo(LOADING_IA) en lugar de popUpTo(SPLASH).
+                        // SPLASH no está en el back stack en este punto (fue removido
+                        // al inicio del flujo). Usar una ruta inexistente en popUpTo
+                        // genera comportamiento indefinido. LOADING_IA sí está en el
+                        // stack y es exactamente lo que queremos limpiar.
                         navController.navigate(Routes.ROUTINE) {
-                            popUpTo(Routes.SPLASH) { inclusive = true }
+                            popUpTo(Routes.LOADING_IA) { inclusive = true }
                         }
                     },
                     onError = { navController.popBackStack() }
@@ -179,15 +184,19 @@ fun NavGraph(isUserLoggedIn: Boolean) {
             composable(Routes.ROUTINE) {
                 val routine = currentRoutine
 
-                // Estado que controla si ya esperamos suficiente para saber que no hay rutina
+                // shouldRedirectToForm actúa como fallback de seguridad:
+                // si después de 600ms currentRoutine SIGUE siendo null
+                // (el usuario llegó aquí sin rutina), redirigimos al Form.
+                //
+                // Con el fix de setRoutine(), este fallback casi nunca se
+                // activa al llegar desde LoadingScreen, porque routine ya
+                // tiene valor en la primera composición.
                 var shouldRedirectToForm by remember { mutableStateOf(false) }
 
-                // Cuando routine es null, esperamos 600ms antes de decidir que no hay rutina.
-                // Si Room emite el valor en ese tiempo (casi siempre < 100ms), cancela el redirect.
                 LaunchedEffect(routine) {
                     if (routine == null) {
                         kotlinx.coroutines.delay(600L)
-                        // Después del delay rechequeamos — si sigue null, redirigimos
+                        // Re-chequeamos después del delay: si sigue null, redirigimos
                         shouldRedirectToForm = true
                     } else {
                         // Llegó la rutina — cancelamos cualquier redirect pendiente
@@ -198,11 +207,14 @@ fun NavGraph(isUserLoggedIn: Boolean) {
                 when {
                     routine != null -> {
                         RoutineScreen(
-                            routine      = routine,
+                            routine       = routine,
                             onDaySelected = { dayId ->
                                 navController.navigate(Routes.dayDetail(dayId))
                             },
                             onGenerateNew = {
+                                // clearRoutine() ahora limpia _currentRoutine de forma
+                                // inmediata (no espera a Room), por lo que la UI
+                                // responde al instante.
                                 sharedRoutineViewModel.clearRoutine()
                                 navController.navigate(Routes.FORM_IA) {
                                     popUpTo(Routes.ROUTINE) { inclusive = true }
@@ -212,7 +224,7 @@ fun NavGraph(isUserLoggedIn: Boolean) {
                     }
 
                     shouldRedirectToForm -> {
-                        // Solo llegamos acá si después de 600ms Room sigue sin rutina
+                        // Fallback: si después de 600ms no hay rutina, vamos al Form
                         LaunchedEffect(Unit) {
                             navController.navigate(Routes.FORM_IA) {
                                 popUpTo(Routes.ROUTINE) { inclusive = true }
@@ -221,7 +233,7 @@ fun NavGraph(isUserLoggedIn: Boolean) {
                     }
 
                     else -> {
-                        // Mientras esperamos a Room — spinner en lugar de pantalla vacía
+                        // Spinner mientras esperamos la emisión de Room
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -251,17 +263,14 @@ fun NavGraph(isUserLoggedIn: Boolean) {
                         workoutDay = workoutDay,
                         onBack = { navController.popBackStack() },
                         onExerciseClick = { route ->
-                            // route ya viene completa con todos los parámetros encodeados
                             navController.navigate(route)
                         }
                     )
                 }
             }
 
-            // ── Exercise Detail (feature/exercise-detail) ─────────────────
+            // ── Exercise Detail ───────────────────────────────────────────
             composable(
-                // Usamos query params para pasar múltiples valores de tipos simples
-                // La ruta queda: exercise_detail?nameEn=...&nameEs=...&sets=...&reps=...&rest=...&notes=...
                 route = "exercise_detail" +
                         "?nameEn={nameEn}" +
                         "&nameEs={nameEs}" +
@@ -290,9 +299,7 @@ fun NavGraph(isUserLoggedIn: Boolean) {
                 )
             }
 
-
-            // ── Search (feature/search) ───────────────────────────────────
-
+            // ── Search ────────────────────────────────────────────────────
             composable(Routes.SEARCH) {
                 SearchScreen(
                     onExerciseClick = { route ->
@@ -301,13 +308,10 @@ fun NavGraph(isUserLoggedIn: Boolean) {
                 )
             }
 
-            // ── profile (feature/firestore-firebase) ───────────────────────────────────
-
+            // ── Profile ───────────────────────────────────────────────────
             composable(Routes.PROFILE) {
                 ProfileScreen(
                     onSignOut = {
-                        // Al cerrar sesión limpiamos el back stack completo
-                        // y mandamos al login sin posibilidad de volver atrás
                         navController.navigate(Routes.LOGIN) {
                             popUpTo(0) { inclusive = true }
                         }
