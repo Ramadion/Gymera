@@ -14,13 +14,22 @@ import javax.inject.Inject
 sealed class ExerciseDetailUiState {
     object Loading : ExerciseDetailUiState()
     data class Success(
-        val dto: FreeExerciseDto,       // datos completos del repositorio free-exercise-db
-        val imageUrls: List<String>,         // URL de imagen construida
-        val nameEs: String,             // nombre en español que viene de Gemini (para mostrar)
+        val dto: FreeExerciseDto,           // datos completos del asset gymera_exercises.json
+        val imageUrls: List<String>,        // URLs de las imágenes para la animación
+        val nameEs: String,                 // nombre en español que viene de Gemini (para mostrar)
         val sets: Int,
         val reps: String,
         val restSeconds: Int,
-        val notes: String
+        val notes: String,
+
+        // ── Instrucciones en español ──────────────────────────────────────────
+        // Vienen directamente del campo instructionsEs del JSON bundleado.
+        // Nunca requieren una llamada de red adicional — el asset ya las tiene.
+        //
+        // Si está vacía (edge case: traducción falló en translate_exercises.py),
+        // la UI muestra instructions (inglés) como fallback. Ver ExerciseDetailScreen.
+        // ─────────────────────────────────────────────────────────────────────
+        val instructionsEs: List<String>
     ) : ExerciseDetailUiState()
     data class Error(val message: String) : ExerciseDetailUiState()
 }
@@ -34,15 +43,15 @@ class ExerciseDetailViewModel @Inject constructor(
     val uiState: StateFlow<ExerciseDetailUiState> = _uiState
 
     /**
-     * Carga el detalle completo del ejercicio.
-     * Recibe todos los datos que vienen de DayDetailScreen via argumentos de navegación.
+     * Carga el detalle completo del ejercicio desde el asset (via Room o memoria).
+     * No realiza ninguna llamada de red — todo viene del JSON bundleado.
      *
-     * @param nameEn   nombre en inglés para buscar en free-exercise-db
-     * @param nameEs   nombre en español para mostrar al usuario
-     * @param sets     series (de Gemini)
-     * @param reps     repeticiones (de Gemini)
+     * @param nameEn       nombre en inglés para buscar en el asset (fuzzy matching)
+     * @param nameEs       nombre en español para mostrar al usuario (viene de Gemini)
+     * @param sets         series (de Gemini)
+     * @param reps         repeticiones (de Gemini)
      * @param restSeconds  descanso en segundos (de Gemini)
-     * @param notes    notas de la IA (de Gemini)
+     * @param notes        notas de la IA (de Gemini)
      */
     fun loadExercise(
         nameEn: String,
@@ -57,7 +66,7 @@ class ExerciseDetailViewModel @Inject constructor(
 
             val dto = exerciseImageRepository.getExerciseDetail(nameEn)
 
-            // Primero chequeamos null — si es null, error y salimos
+            // Si no se encontró el ejercicio en el asset, mostramos error
             if (dto == null) {
                 _uiState.value = ExerciseDetailUiState.Error(
                     "No se encontró información detallada para \"$nameEs\""
@@ -65,20 +74,25 @@ class ExerciseDetailViewModel @Inject constructor(
                 return@launch
             }
 
-            // Recién ACÁ accedemos a dto.images, ya sabemos que no es null
+            // Construimos las URLs de imagen para la animación (2 fotos alternadas)
             val imageUrls = dto.images
                 .orEmpty()
                 .filter { it.isNotBlank() }
                 .map { ExerciseImageRepository.IMAGE_BASE_URL + it }
 
+            // instructionsEs viene del asset — sin loading adicional, sin Gemini.
+            // Si por algún edge case está vacío, la UI usará dto.instructions (inglés).
+            val instructionsEs = dto.instructionsEs
+
             _uiState.value = ExerciseDetailUiState.Success(
-                dto = dto,
-                imageUrls = imageUrls,
-                nameEs = nameEs,
-                sets = sets,
-                reps = reps,
-                restSeconds = restSeconds,
-                notes = notes
+                dto           = dto,
+                imageUrls     = imageUrls,
+                nameEs        = nameEs,
+                sets          = sets,
+                reps          = reps,
+                restSeconds   = restSeconds,
+                notes         = notes,
+                instructionsEs = instructionsEs
             )
         }
     }

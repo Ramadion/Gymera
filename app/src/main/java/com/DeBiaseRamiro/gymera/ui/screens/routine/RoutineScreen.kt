@@ -16,23 +16,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.DeBiaseRamiro.gymera.domain.model.Routine
 import com.DeBiaseRamiro.gymera.domain.model.WorkoutDay
 import com.DeBiaseRamiro.gymera.ui.theme.*
 
-/**
- * RoutineScreen — Pantalla de Rutina Semanal (CU-04)
- *
- * Muestra los 7 días de la semana en un LazyColumn.
- * Cada día es una Card clickeable que navega al Detalle del Día.
- * Los días de descanso se muestran con estilo diferenciado.
- *
- * @param routine         La rutina generada por Gemini (viene del SharedRoutineViewModel)
- * @param onDaySelected   Callback cuando el usuario toca un día → navega a DayDetail
- * @param onGenerateNew   Callback cuando el usuario quiere generar una nueva rutina
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RoutineScreen(
@@ -40,10 +30,8 @@ fun RoutineScreen(
     onDaySelected: (dayId: String) -> Unit,
     onGenerateNew: () -> Unit
 ) {
-    // Estado para el diálogo de confirmación de "Generar nueva rutina" (CU-07)
     var showConfirmDialog by remember { mutableStateOf(false) }
 
-    // Diálogo de confirmación antes de borrar la rutina actual
     if (showConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showConfirmDialog = false },
@@ -64,7 +52,7 @@ fun RoutineScreen(
             confirmButton = {
                 TextButton(onClick = {
                     showConfirmDialog = false
-                    onGenerateNew()   // Navega al formulario
+                    onGenerateNew()
                 }) {
                     Text("Sí, generar nueva", color = PurplePrimary)
                 }
@@ -78,7 +66,6 @@ fun RoutineScreen(
     }
 
     Scaffold(
-        // TopAppBar con el título y el botón de nueva rutina
         topBar = {
             TopAppBar(
                 title = {
@@ -90,7 +77,6 @@ fun RoutineScreen(
                             color = OnBackground
                         )
                         Text(
-                            // Muestra el objetivo de la rutina como subtítulo
                             text = routine.goal.replace("_", " ").lowercase()
                                 .replaceFirstChar { it.uppercase() },
                             fontSize = 12.sp,
@@ -99,7 +85,6 @@ fun RoutineScreen(
                     }
                 },
                 actions = {
-                    // Botón para generar nueva rutina — muestra diálogo de confirmación
                     IconButton(onClick = { showConfirmDialog = true }) {
                         Icon(
                             imageVector = Icons.Default.Refresh,
@@ -122,62 +107,35 @@ fun RoutineScreen(
                 .padding(paddingValues)
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
-            // Espaciado arriba y abajo de la lista
             contentPadding = PaddingValues(vertical = 16.dp)
         ) {
-            // Encabezado con resumen rápido de la rutina
             item {
                 RoutineSummaryHeader(routine = routine)
             }
-
-            // Una Card por cada día de la semana
             itemsIndexed(routine.workoutDays) { _, day ->
                 WorkoutDayCard(
                     day = day,
                     onClick = {
-                        // Solo los días de entrenamiento son navegables
-                        if (!day.isRestDay) {
-                            onDaySelected(day.id)
-                        }
+                        if (!day.isRestDay) onDaySelected(day.id)
                     }
                 )
             }
-
-            // Espaciado inferior para no quedar pegado al borde
             item { Spacer(modifier = Modifier.height(16.dp)) }
         }
     }
 }
 
-/**
- * RoutineSummaryHeader
- *
- * Chip-row con información resumida de la rutina:
- * nivel, días por semana, objetivo.
- * Se muestra arriba de la lista de días.
- */
 @Composable
 private fun RoutineSummaryHeader(routine: Routine) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // Chip: nivel
-        SummaryChip(
-            label = routine.level.lowercase().replaceFirstChar { it.uppercase() }
-        )
-        // Chip: días de entrenamiento
-        SummaryChip(
-            label = "${routine.daysPerWeek} días/sem"
-        )
+        SummaryChip(label = routine.level.lowercase().replaceFirstChar { it.uppercase() })
+        SummaryChip(label = "${routine.daysPerWeek} días/sem")
     }
 }
 
-/**
- * SummaryChip
- *
- * Pequeño chip de información — Material Design 3 AssistChip estilo custom.
- */
 @Composable
 private fun SummaryChip(label: String) {
     Box(
@@ -195,35 +153,25 @@ private fun SummaryChip(label: String) {
     }
 }
 
-/**
- * WorkoutDayCard
- *
- * Card que representa un día de la semana.
- * - Día de entrenamiento: muestra ícono de pesas, músculo foco, cantidad de ejercicios.
- * - Día de descanso: muestra ícono de luna, texto "Descanso", fondo más oscuro.
- *
- * @param day     Datos del día (WorkoutDay)
- * @param onClick Callback al tocar la card (solo días de entrenamiento)
- */
 @Composable
 private fun WorkoutDayCard(
     day: WorkoutDay,
     onClick: () -> Unit
 ) {
-    // El color de fondo cambia según si es descanso o entrenamiento
     val cardBackground = if (day.isRestDay) SurfaceDark.copy(alpha = 0.5f) else SurfaceDark
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            // Solo hacemos clickeable si es día de entrenamiento
             .then(
                 if (!day.isRestDay) Modifier.clickable { onClick() }
                 else Modifier
             ),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = cardBackground),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (day.isRestDay) 0.dp else 4.dp)
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = if (day.isRestDay) 0.dp else 4.dp
+        )
     ) {
         Row(
             modifier = Modifier
@@ -232,12 +180,18 @@ private fun WorkoutDayCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // --- Columna izquierda: ícono + nombre del día ---
+
+            // ── Columna izquierda: ícono + textos ─────────────────────────────
+            // FIX: weight(1f) le dice a Compose que esta Row ocupa el espacio
+            // disponible MENOS lo que necesita la columna derecha.
+            // Sin weight, la Row pedía todo el espacio que quisiera y el Text
+            // nunca tenía un ancho máximo contra el cual aplicar el ellipsis.
             Row(
+                modifier = Modifier.weight(1f),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Ícono: pesas o luna según el tipo de día
+                // Ícono: pesas o luna
                 Box(
                     modifier = Modifier
                         .size(48.dp)
@@ -253,32 +207,45 @@ private fun WorkoutDayCard(
                             Icons.Default.NightlightRound
                         else
                             Icons.Default.FitnessCenter,
-                        contentDescription = if (day.isRestDay) "Día de descanso" else "Día de entrenamiento",
+                        contentDescription = if (day.isRestDay)
+                            "Día de descanso"
+                        else
+                            "Día de entrenamiento",
                         tint = if (day.isRestDay) MutedGray else PurplePrimary,
                         modifier = Modifier.size(24.dp)
                     )
                 }
 
-                Column {
-                    // Nombre del día (Lunes, Martes, etc.)
+                // Textos — ahora sí tienen un ancho máximo definido por el weight
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = day.dayName,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
-                        color = if (day.isRestDay) MutedGray else OnBackground
+                        color = if (day.isRestDay) MutedGray else OnBackground,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
-                    // Subtítulo: músculo foco o "Descanso activo"
                     Text(
                         text = if (day.isRestDay) "Descanso" else day.muscleFocus,
                         fontSize = 13.sp,
-                        color = MutedGray
+                        color = MutedGray,
+                        // maxLines = 1 + Ellipsis: ahora sí funciona porque
+                        // el Column padre tiene width acotado por los dos weight(1f)
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
 
-            // --- Columna derecha: cantidad de ejercicios o texto Descanso ---
+            // ── Columna derecha: cantidad de ejercicios ───────────────────────
+            // No tiene weight → toma solo el espacio que necesita.
+            // La Row izquierda con weight(1f) cede el resto.
             if (!day.isRestDay) {
-                Column(horizontalAlignment = Alignment.End) {
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    modifier = Modifier.padding(start = 12.dp)
+                ) {
                     Text(
                         text = "${day.exercises.size}",
                         fontSize = 22.sp,

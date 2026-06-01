@@ -13,11 +13,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
 import com.bumptech.glide.integration.compose.GlideImage
@@ -31,7 +29,6 @@ import androidx.compose.animation.shrinkVertically
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalGlideComposeApi::class)
 @Composable
 fun ExerciseDetailScreen(
-    // Datos del ejercicio que vienen por argumentos de navegación desde DayDetailScreen
     nameEn: String,
     nameEs: String,
     sets: Int,
@@ -41,9 +38,6 @@ fun ExerciseDetailScreen(
     onBack: () -> Unit,
     viewModel: ExerciseDetailViewModel = hiltViewModel()
 ) {
-    // Cargamos el ejercicio al entrar a la pantalla
-    // LaunchedEffect con nameEn como key garantiza que solo se ejecuta una vez
-    // (o si cambia el ejercicio, lo cual no pasa en este flujo)
     LaunchedEffect(nameEn) {
         viewModel.loadExercise(
             nameEn = nameEn,
@@ -61,7 +55,6 @@ fun ExerciseDetailScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    // Mostramos el nombre en español en el header
                     Text(
                         text = nameEs,
                         style = MaterialTheme.typography.titleMedium,
@@ -85,24 +78,16 @@ fun ExerciseDetailScreen(
 
         when (val state = uiState) {
 
-            // Estado de carga
             is ExerciseDetailUiState.Loading -> {
                 Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
+                    modifier = Modifier.fillMaxSize().padding(paddingValues),
                     contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
-                }
+                ) { CircularProgressIndicator() }
             }
 
-            // Estado de error (ejercicio no encontrado en free-exercise-db)
             is ExerciseDetailUiState.Error -> {
                 Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
+                    modifier = Modifier.fillMaxSize().padding(paddingValues),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(
@@ -120,30 +105,33 @@ fun ExerciseDetailScreen(
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.outline
                         )
-                        Button(onClick = onBack) {
-                            Text("Volver")
-                        }
+                        Button(onClick = onBack) { Text("Volver") }
                     }
                 }
             }
 
-            // Estado success — pantalla principal
             is ExerciseDetailUiState.Success -> {
+
+                // true  = mostrar instrucciones en español (instructionsEs del asset)
+                // false = mostrar instrucciones en inglés  (dto.instructions original)
+                // Arranca en español si la traducción está disponible.
+                var showSpanish by remember {
+                    mutableStateOf(state.instructionsEs.isNotEmpty())
+                }
+
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(paddingValues)
-                        .verticalScroll(rememberScrollState()) // scroll completo de la pantalla
+                        .verticalScroll(rememberScrollState())
                 ) {
 
-                    // ── IMAGEN DEL EJERCICIO ──────────────────────────────────────
-                    // Ocupa el ancho completo con altura fija, como una hero image
+                    // ── IMAGEN ANIMADA ────────────────────────────────────────
                     AnimatedExerciseImage(
                         imageUrls = state.imageUrls,
                         exerciseName = state.nameEs
                     )
 
-                    // ── CONTENIDO PRINCIPAL ───────────────────────────────────────
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -151,25 +139,24 @@ fun ExerciseDetailScreen(
                         verticalArrangement = Arrangement.spacedBy(20.dp)
                     ) {
 
-                        // Nombre en español (título grande) + nombre en inglés (subtítulo)
+                        // ── TÍTULO ────────────────────────────────────────────
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(
                                 text = state.nameEs,
                                 style = MaterialTheme.typography.headlineSmall,
                                 fontWeight = FontWeight.Bold
                             )
+                            // Nombre en inglés como subtítulo discreto
                             Text(
-                                text = state.dto.name, // nombre oficial de free-exercise-db en inglés
+                                text = state.dto.name,
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.outline
                             )
                         }
 
-                        // ── CHIPS DE SERIES / REPS / DESCANSO ────────────────────
-                        // Mismos chips que en DayDetailScreen para consistencia visual
-
-                        // Solo mostramos los chips de rutina si el ejercicio viene de una rutina
-                        // (sets > 0 significa que viene de DayDetailScreen, no del buscador)
+                        // ── CHIPS SERIES / REPS / DESCANSO ───────────────────
+                        // Solo si el ejercicio viene de una rutina (sets > 0).
+                        // Si viene de Search, sets = 0 y no mostramos estos chips.
                         if (state.sets > 0) {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 ExerciseChip(label = "${state.sets} series")
@@ -178,23 +165,42 @@ fun ExerciseDetailScreen(
                             }
                         }
 
-                        // ── INFORMACIÓN DEL EJERCICIO ───────────────────────────── lo saque
+                        // ── INFO DEL EJERCICIO (COLAPSABLE) ───────────────────
+                        // Empieza cerrada para una vista más limpia.
+                        // El usuario la abre si quiere ver músculos, nivel, etc.
+                        CollapsibleInfoCard(
+                            primaryMuscles   = state.dto.primaryMuscles.map { translateMuscle(it) },
+                            secondaryMuscles = state.dto.secondaryMuscles.map { translateMuscle(it) },
+                            equipment        = translateEquipment(state.dto.equipment),
+                            level            = translateLevel(state.dto.level),
+                            category         = translateCategory(state.dto.category)
+                        )
 
-                        // ── NOTAS DE LA IA ────────────────────────────────────────
-                        // Solo mostramos si Gemini generó alguna nota para este ejercicio
+                        // ── NOTAS DE LA IA (COLAPSABLE) ───────────────────────
                         if (state.sets > 0 && state.notes.isNotBlank() && state.notes != "-") {
                             NoteCard(notes = state.notes)
                         }
 
-
-
-                        // ── INSTRUCCIONES PASO A PASO ─────────────────────────────
-                        // Vienen del JSON de free-exercise-db como lista de strings
-                        if (state.dto.instructions.isNotEmpty()) {
-                            InstructionsSection(instructions = state.dto.instructions)
+                        // ── INSTRUCCIONES PASO A PASO ─────────────────────────
+                        // BUG CORREGIDO: antes usaba state.dto.instructions (inglés siempre).
+                        // Ahora usa state.instructionsEs por defecto (del asset traducido),
+                        // con fallback a inglés si instructionsEs está vacío.
+                        // El TextButton permite alternar entre idiomas.
+                        val instructionsToShow = if (showSpanish && state.instructionsEs.isNotEmpty()) {
+                            state.instructionsEs
+                        } else {
+                            state.dto.instructions
                         }
 
-                        // Espaciado al final para que el último elemento no quede pegado
+                        if (instructionsToShow.isNotEmpty()) {
+                            InstructionsSection(
+                                instructions     = instructionsToShow,
+                                showSpanish      = showSpanish,
+                                hasTranslation   = state.instructionsEs.isNotEmpty(),
+                                onToggleLanguage = { showSpanish = !showSpanish }
+                            )
+                        }
+
                         Spacer(modifier = Modifier.height(24.dp))
                     }
                 }
@@ -205,10 +211,6 @@ fun ExerciseDetailScreen(
 
 // ── COMPONENTES AUXILIARES ────────────────────────────────────────────────────
 
-/**
- * Chip reutilizable para series, reps y descanso.
- * Mismo estilo que en DayDetailScreen para consistencia visual.
- */
 @Composable
 private fun ExerciseChip(label: String) {
     Surface(
@@ -226,77 +228,81 @@ private fun ExerciseChip(label: String) {
 }
 
 /**
- * Card con la info de músculos, equipamiento, nivel y categoría.
- * Usa un layout de filas para que quede ordenado y legible.
+ * Card colapsable con músculos, equipamiento, nivel y categoría.
+ * Empieza cerrada — el usuario la abre tocando el encabezado.
+ * Mismo patrón visual que NoteCard para consistencia.
  */
 @Composable
-private fun ExerciseInfoCard(
+private fun CollapsibleInfoCard(
     primaryMuscles: List<String>,
     secondaryMuscles: List<String>,
-    equipment: String?,
+    equipment: String,
     level: String,
     category: String
 ) {
+    // Arranca cerrada para una vista más limpia al entrar a la pantalla
+    var isExpanded by remember { mutableStateOf(false) }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         ),
-        shape = RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(12.dp),
+        onClick = { isExpanded = !isExpanded }
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(
-                text = "Información del ejercicio",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold
-            )
-
-            HorizontalDivider()
-
-            // Músculo principal
-            InfoRow(
-                label = "Músculo principal",
-                value = primaryMuscles.joinToString(", ")
-                    .replaceFirstChar { it.uppercase() }
-            )
-
-            // Músculos secundarios (solo si hay)
-            if (secondaryMuscles.isNotEmpty()) {
-                InfoRow(
-                    label = "Músculos secundarios",
-                    value = secondaryMuscles.joinToString(", ")
-                        .replaceFirstChar { it.uppercase() }
+            // ── Encabezado siempre visible ────────────────────────────────────
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "ℹ️ Información del ejercicio",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = if (isExpanded) "▲" else "▼",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.outline
                 )
             }
 
-            // Equipamiento (puede ser null en el DTO)
-            InfoRow(
-                label = "Equipamiento",
-                value = equipment?.replaceFirstChar { it.uppercase() } ?: "Sin equipamiento"
-            )
+            // ── Contenido expandible ──────────────────────────────────────────
+            AnimatedVisibility(
+                visible = isExpanded,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    HorizontalDivider(modifier = Modifier.padding(top = 4.dp))
 
-            // Nivel de dificultad
-            InfoRow(
-                label = "Nivel",
-                value = translateLevel(level) // traducimos beginner/intermediate/advanced
-            )
-
-            // Categoría
-            InfoRow(
-                label = "Categoría",
-                value = category.replaceFirstChar { it.uppercase() }
-            )
+                    InfoRow(
+                        label = "Músculo principal",
+                        value = primaryMuscles.joinToString(", ")
+                            .replaceFirstChar { it.uppercase() }
+                    )
+                    if (secondaryMuscles.isNotEmpty()) {
+                        InfoRow(
+                            label = "Músculos secundarios",
+                            value = secondaryMuscles.joinToString(", ")
+                                .replaceFirstChar { it.uppercase() }
+                        )
+                    }
+                    InfoRow(label = "Equipamiento", value = equipment)
+                    InfoRow(label = "Nivel",        value = level)
+                    InfoRow(label = "Categoría",    value = category)
+                }
+            }
         }
     }
 }
 
-/**
- * Fila de información: etiqueta en gris + valor en negro.
- * Patrón simple y legible para los metadatos del ejercicio.
- */
 @Composable
 private fun InfoRow(label: String, value: String) {
     Row(
@@ -320,13 +326,12 @@ private fun InfoRow(label: String, value: String) {
 }
 
 /**
- * Card con las notas que generó Gemini para este ejercicio específico.
- * Se muestra como un botón que al presionarlo expande el contenido del consejo.
+ * Card colapsable con las notas que generó Gemini.
+ * Mismo patrón que CollapsibleInfoCard.
  */
 @Composable
 private fun NoteCard(notes: String) {
     var isExpanded by remember { mutableStateOf(false) }
-
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -356,8 +361,6 @@ private fun NoteCard(notes: String) {
                     color = MaterialTheme.colorScheme.onTertiaryContainer
                 )
             }
-
-            // Contenido expandible con animación
             AnimatedVisibility(
                 visible = isExpanded,
                 enter = fadeIn() + expandVertically(),
@@ -372,18 +375,46 @@ private fun NoteCard(notes: String) {
         }
     }
 }
+
 /**
- * Sección de instrucciones paso a paso.
- * Cada instrucción tiene un número de paso y el texto de free-exercise-db.
+ * Instrucciones paso a paso con toggle ES / EN.
+ *
+ * @param instructions      lista ya resuelta (español o inglés según toggle)
+ * @param showSpanish       estado actual del toggle
+ * @param hasTranslation    false = no hay traducción → no se muestra el toggle
+ * @param onToggleLanguage  callback para cambiar el idioma
  */
 @Composable
-private fun InstructionsSection(instructions: List<String>) {
+private fun InstructionsSection(
+    instructions: List<String>,
+    showSpanish: Boolean,
+    hasTranslation: Boolean,
+    onToggleLanguage: () -> Unit
+) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(
-            text = "Instrucciones",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold
-        )
+
+        // Encabezado + toggle en la misma fila
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Instrucciones",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            // El toggle solo aparece si el asset tiene la traducción
+            if (hasTranslation) {
+                TextButton(onClick = onToggleLanguage) {
+                    Text(
+                        text = if (showSpanish) "Ver en inglés" else "Ver en español",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+        }
 
         instructions.forEachIndexed { index, instruction ->
             Row(
@@ -391,7 +422,6 @@ private fun InstructionsSection(instructions: List<String>) {
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.Top
             ) {
-                // Círculo con número de paso
                 Box(
                     modifier = Modifier
                         .size(28.dp)
@@ -406,35 +436,88 @@ private fun InstructionsSection(instructions: List<String>) {
                         fontWeight = FontWeight.Bold
                     )
                 }
-
-                // Texto de la instrucción
                 Text(
                     text = instruction,
                     style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(top = 4.dp) // alineación visual con el círculo
+                    modifier = Modifier.weight(1f).padding(top = 4.dp)
                 )
             }
         }
     }
 }
 
-/**
- * Traduce los niveles de inglés a español.
- * Los valores vienen directamente del JSON de free-exercise-db.
- */
-private fun translateLevel(level: String): String = when (level.lowercase()) {
-    "beginner" -> "Principiante"
-    "intermediate" -> "Intermedio"
-    "advanced" -> "Avanzado"
-    else -> level.replaceFirstChar { it.uppercase() }
+// ── FUNCIONES DE TRADUCCIÓN ───────────────────────────────────────────────────
+// Definidas como `fun` (no private) para poder reutilizarlas en SearchScreen
+// (filtros de músculo, nivel y equipamiento).
+
+/** Traduce grupos musculares de inglés a español. */
+fun translateMuscle(muscle: String): String = when (muscle.lowercase().trim()) {
+    "abdominals"             -> "Abdominales"
+    "abductors"              -> "Abductores"
+    "adductors"              -> "Aductores"
+    "biceps"                 -> "Bíceps"
+    "calves"                 -> "Gemelos"
+    "chest"                  -> "Pecho"
+    "forearms"               -> "Antebrazos"
+    "glutes"                 -> "Glúteos"
+    "hamstrings"             -> "Isquiotibiales"
+    "hip flexors"            -> "Flexores de cadera"
+    "it band"                -> "Banda iliotibial"
+    "lats"                   -> "Dorsales"
+    "lower back"             -> "Lumbar"
+    "middle back"            -> "Espalda media"
+    "neck"                   -> "Cuello"
+    "quadriceps"             -> "Cuádriceps"
+    "shoulders"              -> "Hombros"
+    "triceps"                -> "Tríceps"
+    "traps"                  -> "Trapecios"
+    "upper back"             -> "Espalda alta"
+    "soleus"                 -> "Sóleo"
+    else                     -> muscle.replaceFirstChar { it.uppercase() }
+}
+
+/** Traduce equipamiento de inglés a español. */
+fun translateEquipment(equipment: String?): String = when (equipment?.lowercase()?.trim()) {
+    null, "", "body only", "none" -> "Sin equipamiento"
+    "barbell"                     -> "Barra"
+    "dumbbell"                    -> "Mancuernas"
+    "cable"                       -> "Cable"
+    "machine"                     -> "Máquina"
+    "kettlebells"                 -> "Kettlebells"
+    "bands"                       -> "Bandas elásticas"
+    "medicine ball"               -> "Balón medicinal"
+    "exercise ball"               -> "Pelota de ejercicio"
+    "foam roll"                   -> "Rodillo de espuma"
+    "e-z curl bar"                -> "Barra EZ"
+    "pullup bar"                  -> "Barra de dominadas"
+    "other"                       -> "Otro"
+    else                          -> equipment.replaceFirstChar { it.uppercase() }
+}
+
+/** Traduce categorías de ejercicio de inglés a español. */
+fun translateCategory(category: String): String = when (category.lowercase().trim()) {
+    "strength"                  -> "Fuerza"
+    "cardio"                    -> "Cardio"
+    "stretching"                -> "Estiramiento"
+    "plyometrics"               -> "Pliometría"
+    "powerlifting"              -> "Powerlifting"
+    "olympic weightlifting"     -> "Halterofilia"
+    "strongman"                 -> "Strongman"
+    else                        -> category.replaceFirstChar { it.uppercase() }
+}
+
+/** Traduce niveles de dificultad de inglés a español. */
+fun translateLevel(level: String): String = when (level.lowercase().trim()) {
+    "beginner"      -> "Principiante"
+    "intermediate"  -> "Intermedio"
+    "advanced"      -> "Avanzado"
+    else            -> level.replaceFirstChar { it.uppercase() }
 }
 
 /**
- * Muestra las imágenes del ejercicio alternando entre ellas cada 1.5 segundos,
- * simulando un GIF. Si solo hay una imagen, la muestra estática.
- * Si no hay imágenes, muestra el placeholder con ícono.
+ * Imagen animada que alterna entre las fotos del ejercicio cada 1.5 segundos.
+ * Si solo hay una imagen la muestra estática.
+ * Si no hay imágenes muestra un placeholder con ícono.
  */
 @OptIn(ExperimentalGlideComposeApi::class)
 @Composable
@@ -442,14 +525,12 @@ private fun AnimatedExerciseImage(
     imageUrls: List<String>,
     exerciseName: String
 ) {
-    // Índice de la imagen actualmente visible
     var currentIndex by remember { mutableIntStateOf(0) }
 
-    // Solo iniciamos el timer si hay 2 o más imágenes para alternar
     if (imageUrls.size >= 2) {
         LaunchedEffect(Unit) {
             while (true) {
-                delay(1500L) // 1.5 segundos entre cada foto
+                delay(1500L)
                 currentIndex = (currentIndex + 1) % imageUrls.size
             }
         }
@@ -463,7 +544,6 @@ private fun AnimatedExerciseImage(
         contentAlignment = Alignment.Center
     ) {
         if (imageUrls.isEmpty()) {
-            // Placeholder si free-exercise-db no tiene imágenes para este ejercicio
             Icon(
                 imageVector = Icons.Default.FitnessCenter,
                 contentDescription = null,
@@ -471,8 +551,6 @@ private fun AnimatedExerciseImage(
                 tint = MaterialTheme.colorScheme.outline
             )
         } else {
-            // Crossfade entre imágenes para una transición suave
-            // key = currentIndex fuerza a Glide a cargar la nueva imagen cuando cambia el índice
             key(currentIndex) {
                 GlideImage(
                     model = imageUrls[currentIndex],

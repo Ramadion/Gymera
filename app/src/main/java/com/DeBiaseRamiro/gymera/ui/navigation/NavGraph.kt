@@ -146,32 +146,10 @@ fun NavGraph(isUserLoggedIn: Boolean) {
                 LoadingScreen(
                     userProfile = userProfile ?: UserProfile(),
                     onRoutineGenerated = { routine ->
-                        // ── FIX PRINCIPAL ─────────────────────────────────────────
-                        // Establecemos la rutina de forma INMEDIATA en el StateFlow
-                        // ANTES de navegar. Esto garantiza que cuando el composable
-                        // de ROUTINE renderice por primera vez, currentRoutine ya
-                        // tiene el valor correcto — sin depender del timing de Room.
-                        //
-                        // Sin este setRoutine(), existía una race condition:
-                        //   1. saveRoutine() escribe en Room (IO dispatcher)
-                        //   2. navigate(ROUTINE) ocurre
-                        //   3. ROUTINE composable renderiza con currentRoutine = null
-                        //      (Room todavía no emitió al Flow del main thread)
-                        //   4. LaunchedEffect inicia timer de 600ms
-                        //   5. Si Room llega después de 600ms → redirige a Form
-                        //
-                        // Con setRoutine(), el paso 3 ya tiene el valor correcto.
-                        // Cuando Room emita el mismo valor (< 16ms después), la
-                        // actualización es idempotente.
-                        // ─────────────────────────────────────────────────────────
+
                         sharedRoutineViewModel.setRoutine(routine)
                         sharedRoutineViewModel.clearUserProfile()
 
-                        // FIX secundario: popUpTo(LOADING_IA) en lugar de popUpTo(SPLASH).
-                        // SPLASH no está en el back stack en este punto (fue removido
-                        // al inicio del flujo). Usar una ruta inexistente en popUpTo
-                        // genera comportamiento indefinido. LOADING_IA sí está en el
-                        // stack y es exactamente lo que queremos limpiar.
                         navController.navigate(Routes.ROUTINE) {
                             popUpTo(Routes.LOADING_IA) { inclusive = true }
                         }

@@ -88,7 +88,7 @@ class RoutineRepositoryImpl @Inject constructor(
                       "sets": 4,
                       "reps": "8-12",
                       "restSeconds": 90,
-                      "notes": "Mantene los codos a 45 grados"
+                      "notes": "peso recomendado para este ejercicio teniendo en cuenta ${physicalSection.ifBlank { "" }} y ${userProfile.level}"
                     }
                   ]
                 },
