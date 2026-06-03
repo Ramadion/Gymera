@@ -116,4 +116,7 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     debugImplementation("androidx.compose.ui:ui-tooling")
+
+    // Otros
+    implementation("sh.calvin.reorderable:reorderable:2.4.0")
 }

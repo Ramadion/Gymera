@@ -26,8 +26,6 @@ class RoutineRepositoryImpl @Inject constructor(
         physicalProfile: UserPhysicalProfile?
     ): Routine {
 
-        // Construimos la sección de datos físicos solo si el usuario los completó
-        // Cada campo se agrega individualmente para no enviar datos vacíos a Gemini
         val physicalSection = buildString {
             if (physicalProfile != null) {
                 val hasAnyData = physicalProfile.age > 0 ||
@@ -128,7 +126,6 @@ class RoutineRepositoryImpl @Inject constructor(
     }
 
     override suspend fun saveRoutine(routine: Routine, userUid: String) {
-        // Borramos TODAS las rutinas anteriores — solo existe 1 a la vez
         routineDao.deleteAllRoutines(userUid)
 
         routineDao.insertRoutine(
@@ -191,6 +188,40 @@ class RoutineRepositoryImpl @Inject constructor(
     override suspend fun deactivateActiveRoutine(userUid: String) {
         routineDao.deactivateAllRoutines(userUid)
     }
+
+    // ── Edición manual de ejercicios ──────────────────────────────────────
+
+    override suspend fun removeExercise(exerciseId: String) {
+        routineDao.deleteExercise(exerciseId)
+    }
+
+    // Persiste el nuevo orden actualizando orderInDay de cada ejercicio.
+    // Se llama una sola vez al soltar el drag — no en cada posición intermedia.
+    override suspend fun reorderExercises(exercises: List<Exercise>) {
+        exercises.forEachIndexed { index, exercise ->
+            routineDao.updateExerciseOrder(exercise.id, index)
+        }
+    }
+
+    // Inserta un ejercicio nuevo al final de un día específico.
+    override suspend fun addExercise(dayId: String, exercise: Exercise, orderInDay: Int) {
+        routineDao.insertExercise(
+            ExerciseAssignmentEntity(
+                id           = exercise.id,
+                workoutDayId = dayId,
+                nameEs       = exercise.name,
+                nameEn       = exercise.nameEn,
+                muscleGroup  = exercise.muscleGroup,
+                sets         = exercise.sets,
+                reps         = exercise.reps,
+                restSeconds  = exercise.restSeconds,
+                orderInDay   = orderInDay,
+                notes        = exercise.notes
+            )
+        )
+    }
+
+    // ── Helpers privados ──────────────────────────────────────────────────
 
     private suspend fun buildRoutineFromEntity(entity: RoutineEntity): Routine {
         val dayEntities = routineDao.getWorkoutDays(entity.id)

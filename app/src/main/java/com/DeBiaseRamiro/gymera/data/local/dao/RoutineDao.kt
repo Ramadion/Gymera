@@ -11,7 +11,6 @@ interface RoutineDao {
 
     // ── INSERT ────────────────────────────────────────────────────────────
 
-    // REPLACE reemplaza la fila si ya existe el mismo PrimaryKey
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertRoutine(routine: RoutineEntity)
 
@@ -21,14 +20,39 @@ interface RoutineDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertExercises(exercises: List<ExerciseAssignmentEntity>)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertExercise(exercise: ExerciseAssignmentEntity)
+
     // ── QUERY ─────────────────────────────────────────────────────────────
 
-    // Flow: emite automáticamente cada vez que cambia la tabla routine.
-    // La UI observa este Flow y se actualiza sola sin polling.
-    @Query("SELECT * FROM routine WHERE userUid = :uid AND isActive = 1 LIMIT 1")
+    // ── BUG FIX: JOIN con workout_day y exercise_assignment ───────────────
+    // Antes: query solo referenciaba `routine`. Room's InvalidationTracker
+    // solo re-emite el Flow cuando cambia una tabla de la query. Agregar o
+    // eliminar ejercicios modifica `exercise_assignment` (no `routine`),
+    // así que el Flow no emitía y la UI quedaba desactualizada.
+    //
+    // Ahora: LEFT JOIN con workout_day y exercise_assignment hace que Room
+    // observe las tres tablas. Cualquier cambio en exercises dispara una
+    // nueva emisión, propagando la actualización por toda la cadena:
+    //   RoutineDao → RoutineRepositoryImpl → SharedRoutineViewModel → NavGraph
+    //
+    // LEFT JOIN (no INNER JOIN) para que la rutina se devuelva aunque todos
+    // los días sean descanso (sin ningún exercise_assignment).
+    // LIMIT 1 alcanza porque todos los campos son de `r` — la misma fila de
+    // routine — y cualquiera de las filas duplicadas del JOIN sirve.
+    // ─────────────────────────────────────────────────────────────────────
+    @Query("""
+        SELECT r.id, r.userUid, r.goal, r.daysPerWeek, r.sessionDuration,
+               r.level, r.limitations, r.generatedAt, r.isActive
+        FROM routine r
+        LEFT JOIN workout_day wd ON wd.routineId = r.id
+        LEFT JOIN exercise_assignment ea ON ea.workoutDayId = wd.id
+        WHERE r.userUid = :uid AND r.isActive = 1
+        LIMIT 1
+    """)
     fun getActiveRoutineFlow(uid: String): Flow<RoutineEntity?>
 
-    // Versión suspend para el Splash (necesita el valor una sola vez, no un stream)
+    // Versión suspend para el Splash (lee una sola vez, no necesita Flow)
     @Query("SELECT * FROM routine WHERE userUid = :uid AND isActive = 1 LIMIT 1")
     suspend fun getActiveRoutine(uid: String): RoutineEntity?
 
@@ -40,17 +64,20 @@ interface RoutineDao {
 
     // ── UPDATE ────────────────────────────────────────────────────────────
 
-    // Desactiva todas las rutinas del usuario antes de activar la nueva
     @Query("UPDATE routine SET isActive = 0 WHERE userUid = :uid")
     suspend fun deactivateAllRoutines(uid: String)
 
+    @Query("UPDATE exercise_assignment SET orderInDay = :order WHERE id = :exerciseId")
+    suspend fun updateExerciseOrder(exerciseId: String, order: Int)
+
     // ── DELETE ────────────────────────────────────────────────────────────
 
-    // Borra rutinas inactivas para no acumular basura en la DB
     @Query("DELETE FROM routine WHERE userUid = :uid AND isActive = 0")
     suspend fun deleteInactiveRoutines(uid: String)
 
-    // RoutineDao.kt — agregar
     @Query("DELETE FROM routine WHERE userUid = :uid")
     suspend fun deleteAllRoutines(uid: String)
+
+    @Query("DELETE FROM exercise_assignment WHERE id = :exerciseId")
+    suspend fun deleteExercise(exerciseId: String)
 }
