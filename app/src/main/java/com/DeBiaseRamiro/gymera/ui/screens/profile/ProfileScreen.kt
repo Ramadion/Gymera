@@ -28,8 +28,11 @@ import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
 import com.bumptech.glide.integration.compose.GlideImage
 import com.google.firebase.auth.FirebaseAuth
 import com.DeBiaseRamiro.gymera.ui.theme.*
+import com.DeBiaseRamiro.gymera.ui.shared.SharedRoutineViewModel
+import com.DeBiaseRamiro.gymera.domain.model.Routine
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalGlideComposeApi::class)
 @Composable
@@ -40,6 +43,8 @@ fun ProfileScreen(
     val user            = FirebaseAuth.getInstance().currentUser
     val physicalProfile by viewModel.physicalProfile.collectAsState()
     val saveState       by viewModel.saveState.collectAsState()
+    val sharedRoutineViewModel: SharedRoutineViewModel = hiltViewModel()
+    val currentRoutine by sharedRoutineViewModel.currentRoutine.collectAsState()
 
     var isEditing         by remember { mutableStateOf(false) }
     var showSignOutDialog by remember { mutableStateOf(false) }
@@ -247,7 +252,8 @@ fun ProfileScreen(
                 color    = MutedGray
             )
 
-            Spacer(modifier = Modifier.height(28.dp))
+
+            Spacer(modifier = Modifier.height(20.dp))
             HorizontalDivider(color = SurfaceVariant)
             Spacer(modifier = Modifier.height(24.dp))
 
@@ -258,7 +264,7 @@ fun ProfileScreen(
                 verticalAlignment         = Alignment.CenterVertically
             ) {
                 Text(
-                    text       = "Datos físicos",
+                    text       = "Estado físico",
                     fontSize   = 16.sp,
                     fontWeight = FontWeight.Bold,
                     color      = OnBackground
@@ -269,7 +275,7 @@ fun ProfileScreen(
                     } ?: false
                     if (!hasData) {
                         Text(
-                            text     = "Completá tu perfil para mejores rutinas",
+                            text     = "Completá tu perfil para mejores sugerencias",
                             fontSize = 11.sp,
                             color    = PurplePrimary
                         )
@@ -424,6 +430,23 @@ fun ProfileScreen(
 
                 // ── MODO LECTURA ──────────────────────────────────────────
 
+                val imc = calcularIMC(
+                    physicalProfile?.weightKg ?: 0f,
+                    physicalProfile?.heightCm ?: 0
+                )
+
+                ProfileStateSummaryCard(
+                    imc = imc,
+                    age = physicalProfile?.age ?: 0,
+                    weightKg = physicalProfile?.weightKg ?: 0f,
+                    heightCm = physicalProfile?.heightCm ?: 0,
+                    goal = currentRoutine?.goal.orEmpty(),
+                    level = currentRoutine?.level.orEmpty(),
+                    daysPerWeek = currentRoutine?.daysPerWeek ?: 0
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
                 Row(
                     modifier              = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -450,43 +473,27 @@ fun ProfileScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // IMC — solo si tenemos peso y altura
-                val imc = calcularIMC(
-                    physicalProfile?.weightKg ?: 0f,
-                    physicalProfile?.heightCm ?: 0
+                val focusLabel = currentRoutine?.goal?.takeIf { it.isNotBlank() } ?: "Rutina personalizada"
+                val recommendationBase = buildLoadRecommendationBase(
+                    weightKg = physicalProfile?.weightKg ?: 0f,
+                    heightCm = physicalProfile?.heightCm ?: 0,
+                    goal = currentRoutine?.goal.orEmpty(),
+                    level = currentRoutine?.level.orEmpty()
                 )
-                if (imc != null) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors   = CardDefaults.cardColors(containerColor = SurfaceDark),
-                        shape    = RoundedCornerShape(12.dp)
-                    ) {
-                        Row(
-                            modifier              = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment     = Alignment.CenterVertically
-                        ) {
-                            Column {
-                                Text("IMC", fontSize = 12.sp, color = MutedGray)
-                                Text(
-                                    text       = "%.1f".format(imc),
-                                    fontSize   = 20.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color      = OnBackground
-                                )
-                            }
-                            Text(
-                                text       = categoriaIMC(imc),
-                                fontSize   = 13.sp,
-                                color      = colorIMC(imc),
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-                }
+
+                RecommendationOverviewCard(
+                    focusLabel = focusLabel,
+                    currentRoutine = currentRoutine,
+                    recommendationBase = recommendationBase
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                LoadRecommendationSection(
+                    recommendations = recommendationBase
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
 
                 // Fecha de nacimiento — solo si está cargada
                 if (selectedDateText.isNotEmpty()) {
@@ -569,6 +576,277 @@ fun ProfileScreen(
 // ── Componentes auxiliares ────────────────────────────────────────────────────
 
 @Composable
+private fun ProfileTagRow(tags: List<String>) {
+    if (tags.isEmpty()) return
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        tags.take(3).forEach { tag ->
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = SurfaceDark
+            ) {
+                Text(
+                    text = tag,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    fontSize = 11.sp,
+                    color = OnBackground,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileOverviewCard(
+    age: Int,
+    weightKg: Float,
+    heightCm: Int,
+    gender: String,
+    focus: String,
+    level: String,
+    daysPerWeek: Int
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors   = CardDefaults.cardColors(containerColor = SurfaceDark),
+        shape    = RoundedCornerShape(18.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Resumen rápido",
+                        fontSize = 13.sp,
+                        color = MutedGray
+                    )
+                    Text(
+                        text = if (focus.isNotBlank()) focus else "Sin rutina activa",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = OnBackground
+                    )
+                    Text(
+                        text = buildString {
+                            append(if (level.isNotBlank()) level else "Nivel no definido")
+                            if (daysPerWeek > 0) append(" • $daysPerWeek días/semana")
+                        },
+                        fontSize = 12.sp,
+                        color = MutedGray
+                    )
+                }
+
+                Surface(
+                    color = PurplePrimary.copy(alpha = 0.16f),
+                    shape = RoundedCornerShape(50)
+                ) {
+                    Text(
+                        text = if (gender.isNotBlank() && gender != "No especificado") gender else "Perfil base",
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        fontSize = 11.sp,
+                        color = PurplePrimary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ProfileMetricPill(
+                    modifier = Modifier.weight(1f),
+                    label = "Edad",
+                    value = if (age > 0) "$age años" else "—"
+                )
+                ProfileMetricPill(
+                    modifier = Modifier.weight(1f),
+                    label = "Peso",
+                    value = if (weightKg > 0f) "${weightKg.toInt()} kg" else "—"
+                )
+                ProfileMetricPill(
+                    modifier = Modifier.weight(1f),
+                    label = "Altura",
+                    value = if (heightCm > 0) "$heightCm cm" else "—"
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileMetricPill(
+    modifier: Modifier = Modifier,
+    label: String,
+    value: String
+) {
+    Surface(
+        modifier = modifier,
+        color = SurfaceVariant,
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(vertical = 10.dp, horizontal = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = label,
+                fontSize = 10.sp,
+                color = MutedGray
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = value,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (value == "—") MutedGray else OnBackground
+            )
+        }
+    }
+}
+
+@Composable
+private fun ProfileStateSummaryCard(
+    imc: Float?,
+    age: Int,
+    weightKg: Float,
+    heightCm: Int,
+    goal: String,
+    level: String,
+    daysPerWeek: Int
+) {
+    val statusLabel = imc?.let { categoriaIMC(it) } ?: "Sin IMC"
+    val summaryText = when {
+        imc == null && weightKg <= 0f && heightCm <= 0 -> "Completá peso y altura para obtener una lectura útil de tu estado físico."
+        imc == null -> "Tu perfil ya tiene datos suficientes para armar sugerencias, pero el IMC todavía no puede calcularse."
+        imc < 18.5f -> "Estás por debajo del rango normal. Conviene priorizar progresión suave y constancia."
+        imc < 25f -> "Estás en un punto estable. Es una base buena para progresar sin apurar la carga."
+        imc < 30f -> "Tenés margen para priorizar técnica y progresión gradual en lugar de subir peso de golpe."
+        else -> "La prioridad acá es ajustar volumen, técnica y progresión de manera conservadora."
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+        shape = RoundedCornerShape(18.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Estado físico",
+                        fontSize = 13.sp,
+                        color = MutedGray
+                    )
+                    Text(
+                        text = statusLabel,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = OnBackground
+                    )
+                }
+
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = if (imc != null) "%.1f".format(imc) else "—",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = PurplePrimary
+                    )
+                    Text(
+                        text = "IMC",
+                        fontSize = 11.sp,
+                        color = MutedGray
+                    )
+                }
+            }
+
+            Text(
+                text = summaryText,
+                fontSize = 13.sp,
+                color = OnBackground
+            )
+
+
+
+            if (level.isNotBlank()) {
+                Surface(
+                    color = PurplePrimary.copy(alpha = 0.12f),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(
+                        text = "Nivel actual: $level",
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        fontSize = 12.sp,
+                        color = PurplePrimary,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileMiniInfo(
+    modifier: Modifier = Modifier,
+    title: String,
+    value: String
+) {
+    Surface(
+        modifier = modifier,
+        color = SurfaceVariant,
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = title,
+                fontSize = 10.sp,
+                color = MutedGray
+            )
+            Text(
+                text = value,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = OnBackground,
+                maxLines = 2
+            )
+        }
+    }
+}
+
+private data class LoadRecommendation(
+    val group: String,
+    val suggestedRangeKg: String,
+    val repRange: String,
+    val note: String
+)
+
+@Composable
 private fun StatCard(
     modifier: Modifier = Modifier,
     label: String,
@@ -618,4 +896,188 @@ private fun colorIMC(imc: Float) = when {
     imc < 25f   -> androidx.compose.ui.graphics.Color(0xFF81C784)
     imc < 30f   -> androidx.compose.ui.graphics.Color(0xFFFFB74D)
     else        -> androidx.compose.ui.graphics.Color(0xFFE57373)
+}
+
+private fun buildLoadRecommendationBase(
+    weightKg: Float,
+    heightCm: Int,
+    goal: String,
+    level: String
+): List<LoadRecommendation> {
+    if (weightKg <= 0f || heightCm <= 0) {
+        return emptyList()
+    }
+
+    val heightFactor = when {
+        heightCm < 160 -> 0.92f
+        heightCm < 175 -> 1.0f
+        heightCm < 190 -> 1.08f
+        else -> 1.15f
+    }
+
+    val goalFactor = when {
+        goal.contains("fuerza", ignoreCase = true) -> 1.15f
+        goal.contains("power", ignoreCase = true) -> 1.15f
+        goal.contains("hipertrof", ignoreCase = true) -> 1.0f
+        goal.contains("musculo", ignoreCase = true) -> 1.0f
+        goal.contains("resistencia", ignoreCase = true) -> 0.85f
+        goal.contains("defin", ignoreCase = true) -> 0.9f
+        else -> 1.0f
+    }
+
+    val levelFactor = when {
+        level.contains("princip", ignoreCase = true) -> 0.78f
+        level.contains("beginner", ignoreCase = true) -> 0.78f
+        level.contains("inter", ignoreCase = true) -> 1.0f
+        level.contains("avanz", ignoreCase = true) -> 1.12f
+        level.contains("advanced", ignoreCase = true) -> 1.12f
+        else -> 1.0f
+    }
+
+    val multiplier = heightFactor * goalFactor * levelFactor
+
+    fun suggest(
+        group: String,
+        percent: Float,
+        repRange: String,
+        note: String,
+        useBodyWeight: Boolean = false
+    ): LoadRecommendation {
+        val baseKg = weightKg * percent * multiplier
+        val suggestedRange = if (useBodyWeight) {
+            "Peso corporal"
+        } else {
+            val minKg = (baseKg * 0.85f).roundToInt().coerceAtLeast(1)
+            val maxKg = (baseKg * 1.15f).roundToInt().coerceAtLeast(minKg)
+            if (minKg == maxKg) "~$minKg kg" else "~$minKg-$maxKg kg"
+        }
+        return LoadRecommendation(
+            group = group,
+            suggestedRangeKg = suggestedRange,
+            repRange = repRange,
+            note = note
+        )
+    }
+
+    return listOf(
+        suggest("Piernas", 0.50f, "8-12 reps", "Arranque prudente; sube de a poco si mantenés técnica."),
+        suggest("Gluteos", 0.45f, "10-15 reps", "Suele tolerar más volumen, no apures la carga."),
+        suggest("Espalda", 0.35f, "8-12 reps", "Priorizá control y recorrido completo."),
+        suggest("Pecho", 0.28f, "8-12 reps", "Buscá un peso que no rompa la línea del movimiento."),
+        suggest("Hombros", 0.16f, "10-15 reps", "Carga moderada, técnica estricta."),
+        suggest("Biceps", 0.12f, "10-15 reps", "Mejor quedarse corto que balancear."),
+        suggest("Triceps", 0.12f, "10-15 reps", "Suele responder bien a progresiones chicas."),
+        suggest("Core", 0.00f, "12-20 reps", "En core priorizá peso corporal o carga mínima.", useBodyWeight = true)
+    )
+}
+
+@Composable
+private fun RecommendationOverviewCard(
+    focusLabel: String,
+    currentRoutine: Routine?,
+    recommendationBase: List<LoadRecommendation>
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors   = CardDefaults.cardColors(containerColor = SurfaceDark),
+        shape    = RoundedCornerShape(16.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = "Tu enfoque actual",
+                fontSize = 13.sp,
+                color = MutedGray
+            )
+            Text(
+                text = focusLabel,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = OnBackground
+            )
+
+            val routineSummary = buildString {
+                append(currentRoutine?.level?.takeIf { it.isNotBlank() } ?: "Rutina no activa")
+                currentRoutine?.daysPerWeek?.takeIf { it > 0 }?.let {
+                    append(" • $it días/semana")
+                }
+            }
+            Text(
+                text = routineSummary,
+                fontSize = 13.sp,
+                color = MutedGray
+            )
+
+            if (recommendationBase.isNotEmpty()) {
+                Text(
+                    text = "Las cargas de abajo son un punto de partida. Ajustalas para terminar cada serie con buena técnica y 1-3 reps en reserva.",
+                    fontSize = 12.sp,
+                    color = PurplePrimary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LoadRecommendationSection(
+    recommendations: List<LoadRecommendation>
+) {
+    if (recommendations.isEmpty()) return
+
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(
+            text = "Cargas sugeridas por grupo muscular",
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            color = OnBackground
+        )
+
+        recommendations.forEach { rec ->
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = rec.group,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = OnBackground
+                        )
+                        Text(
+                            text = rec.note,
+                            fontSize = 12.sp,
+                            color = MutedGray,
+                            maxLines = 2
+                        )
+                    }
+
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(
+                            text = rec.suggestedRangeKg,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = PurplePrimary
+                        )
+                        Text(
+                            text = rec.repRange,
+                            fontSize = 11.sp,
+                            color = MutedGray
+                        )
+                    }
+                }
+            }
+        }
+    }
 }

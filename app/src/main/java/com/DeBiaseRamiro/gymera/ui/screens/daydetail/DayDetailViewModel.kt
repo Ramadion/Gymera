@@ -46,16 +46,33 @@ class DayDetailViewModel @Inject constructor(
     // ── Buscador para agregar ejercicios ──────────────────────────────────
     private val _allExercises  = MutableStateFlow<List<FreeExerciseDto>>(emptyList())
     private val _searchQuery   = MutableStateFlow("")
+    private val _muscleGroups  = MutableStateFlow<List<String>>(emptyList())
+    private val _selectedMuscle = MutableStateFlow<String?>(null)
     val searchQuery: StateFlow<String> = _searchQuery
+    val muscleGroups: StateFlow<List<String>> = _muscleGroups
+    val selectedMuscle: StateFlow<String?> = _selectedMuscle
 
     // Filtra la lista completa con debounce de 300ms para no filtrar en cada letra
     @OptIn(FlowPreview::class)
     val searchResults: StateFlow<List<FreeExerciseDto>> = combine(
         _allExercises,
-        _searchQuery.debounce(300L)
-    ) { all, query ->
-        if (query.isBlank()) all.take(50)   // primeras 50 cuando no hay query
-        else all.filter { it.name.lowercase().contains(query.lowercase()) }.take(50)
+        _searchQuery.debounce(300L),
+        _selectedMuscle
+    ) { all, query, muscle ->
+        var result = all
+
+        if (query.isNotBlank()) {
+            val normalizedQuery = query.trim().lowercase()
+            result = result.filter { it.name.lowercase().contains(normalizedQuery) }
+        }
+
+        if (muscle != null) {
+            result = result.filter { dto ->
+                dto.primaryMuscles.any { it.equals(muscle, ignoreCase = true) }
+            }
+        }
+
+        result.take(50)
     }.stateIn(
         scope   = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -141,15 +158,23 @@ class DayDetailViewModel @Inject constructor(
     // Carga los 873 ejercicios desde el asset para el buscador del BottomSheet.
     // Solo lo hace una vez — las llamadas siguientes encuentran la lista ya en RAM.
     fun loadAllExercisesForSearch() {
-        if (_allExercises.value.isNotEmpty()) return
+        if (_allExercises.value.isNotEmpty() && _muscleGroups.value.isNotEmpty()) return
         viewModelScope.launch {
             _allExercises.value = exerciseImageRepository.getAllExercises()
+            _muscleGroups.value = exerciseImageRepository.getMuscleGroups()
         }
     }
 
     // ── resetSearch ───────────────────────────────────────────────────────
     // Limpia el buscador al cerrar el BottomSheet
-    fun resetSearch() { _searchQuery.value = "" }
+    fun resetSearch() {
+        _searchQuery.value = ""
+        _selectedMuscle.value = null
+    }
+
+    fun onMuscleSelected(muscle: String?) {
+        _selectedMuscle.value = if (_selectedMuscle.value == muscle) null else muscle
+    }
 
     // ── loadImages ────────────────────────────────────────────────────────
     // Carga imágenes de todos los ejercicios en paralelo al inicializar el día

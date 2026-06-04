@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -30,6 +31,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
 import com.bumptech.glide.integration.compose.GlideImage
 import com.DeBiaseRamiro.gymera.data.remote.dto.FreeExerciseDto
+import com.DeBiaseRamiro.gymera.data.repository.ExerciseImageRepository
 import com.DeBiaseRamiro.gymera.domain.model.Exercise
 import com.DeBiaseRamiro.gymera.domain.model.WorkoutDay
 import com.DeBiaseRamiro.gymera.ui.screens.exercisedetail.translateMuscle
@@ -59,6 +61,8 @@ fun DayDetailScreen(
     val imageStates   by viewModel.imageStates.collectAsState()
     val searchQuery   by viewModel.searchQuery.collectAsState()
     val searchResults by viewModel.searchResults.collectAsState()
+    val muscleGroups  by viewModel.muscleGroups.collectAsState()
+    val selectedMuscle by viewModel.selectedMuscle.collectAsState()
 
     var showAddSheet by remember { mutableStateOf(false) }
 
@@ -254,15 +258,18 @@ fun DayDetailScreen(
 
     if (showAddSheet) {
         AddExerciseBottomSheet(
-            searchQuery   = searchQuery,
-            searchResults = searchResults,
-            onQueryChange = { viewModel.onSearchQueryChanged(it) },
-            onAdd         = { nameEn, nameEs, muscleGroup, sets, reps, restSeconds ->
+            searchQuery      = searchQuery,
+            searchResults    = searchResults,
+            muscleGroups     = muscleGroups,
+            selectedMuscle   = selectedMuscle,
+            onQueryChange    = { viewModel.onSearchQueryChanged(it) },
+            onMuscleSelected = { viewModel.onMuscleSelected(it) },
+            onAdd            = { nameEn, nameEs, muscleGroup, sets, reps, restSeconds ->
                 viewModel.addExercise(nameEn, nameEs, muscleGroup, sets, reps, restSeconds)
                 showAddSheet = false
                 viewModel.resetSearch()
             },
-            onDismiss = {
+            onDismiss        = {
                 showAddSheet = false
                 viewModel.resetSearch()
             }
@@ -342,9 +349,12 @@ private fun ExerciseChip(label: String) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddExerciseBottomSheet(
-    searchQuery   : String,
-    searchResults : List<FreeExerciseDto>,
-    onQueryChange : (String) -> Unit,
+    searchQuery     : String,
+    searchResults   : List<FreeExerciseDto>,
+    muscleGroups    : List<String>,
+    selectedMuscle  : String?,
+    onQueryChange   : (String) -> Unit,
+    onMuscleSelected: (String?) -> Unit,
     onAdd         : (nameEn: String, nameEs: String, muscleGroup: String, sets: Int, reps: String, restSeconds: Int) -> Unit,
     onDismiss     : () -> Unit
 ) {
@@ -383,14 +393,59 @@ private fun AddExerciseBottomSheet(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 380.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = "Filtrar por músculo",
+                    color = MutedGray,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    item {
+                        FilterChip(
+                            selected = selectedMuscle == null,
+                            onClick = { onMuscleSelected(null) },
+                            label = { Text("Todos") }
+                        )
+                    }
+                    items(muscleGroups, key = { it }) { muscle ->
+                        FilterChip(
+                            selected = selectedMuscle?.equals(muscle, ignoreCase = true) == true,
+                            onClick = { onMuscleSelected(muscle) },
+                            label = { Text(translateMuscle(muscle)) }
+                        )
+                    }
+                }
+
+                if (selectedMuscle != null) {
+                    TextButton(
+                        onClick = { onMuscleSelected(null) },
+                        contentPadding = PaddingValues(top = 4.dp, bottom = 4.dp)
+                    ) {
+                        Text("Limpiar filtro", color = PurplePrimary)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(searchResults, key = { it.id }) { dto ->
-                        ExerciseSearchRow(dto = dto, onClick = { selectedExercise = dto })
+                        ExerciseSearchCard(dto = dto, onClick = { selectedExercise = dto })
                     }
                     if (searchResults.isEmpty()) {
                         item {
                             Text(
-                                text = if (searchQuery.isBlank()) "Escribí el nombre de un ejercicio" else "Sin resultados para \"$searchQuery\"",
+                                text = when {
+                                    searchQuery.isBlank() && selectedMuscle != null ->
+                                        "No hay ejercicios para ${translateMuscle(selectedMuscle!!)}"
+                                    searchQuery.isBlank() ->
+                                        "Escribí el nombre de un ejercicio o filtrá por músculo"
+                                    else ->
+                                        "Sin resultados para \"$searchQuery\""
+                                },
                                 color = MutedGray, fontSize = 13.sp,
                                 modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
                                 textAlign = TextAlign.Center
@@ -413,18 +468,62 @@ private fun AddExerciseBottomSheet(
 }
 
 @Composable
-private fun ExerciseSearchRow(dto: FreeExerciseDto, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(BackgroundDark).clickable { onClick() }.padding(horizontal = 14.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment     = Alignment.CenterVertically
+@OptIn(ExperimentalGlideComposeApi::class)
+private fun ExerciseSearchCard(dto: FreeExerciseDto, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = BackgroundDark)
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(text = dto.name, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = OnBackground, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            val muscles = dto.primaryMuscles.take(2).joinToString(", ") { translateMuscle(it) }
-            if (muscles.isNotBlank()) Text(text = muscles, fontSize = 12.sp, color = PurplePrimary)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            ExercisePreviewStack(dto = dto)
+
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = dto.name,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = OnBackground,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                val muscles = dto.primaryMuscles.take(2).joinToString(" • ") { translateMuscle(it) }
+                if (muscles.isNotBlank()) {
+                    Text(
+                        text = muscles,
+                        fontSize = 12.sp,
+                        color = PurplePrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                    dto.equipment?.takeIf { it.isNotBlank() }?.let {
+                        ExerciseMetaChip(text = it)
+                    }
+                    dto.level.takeIf { it.isNotBlank() }?.let {
+                        ExerciseMetaChip(text = it)
+                    }
+                }
+            }
+
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = MutedGray,
+                modifier = Modifier.size(18.dp)
+            )
         }
-        Icon(imageVector = Icons.Default.ChevronRight, contentDescription = null, tint = MutedGray, modifier = Modifier.size(18.dp))
     }
 }
 
@@ -438,11 +537,15 @@ private fun AddExerciseForm(
     var reps by remember { mutableStateOf("10") }
     var rest by remember { mutableStateOf("60") }
 
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 16.dp)) {
-        IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver", tint = MutedGray)
+    Column(modifier = Modifier.padding(bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver", tint = MutedGray)
+            }
+            Text(text = dto.name, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = OnBackground, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         }
-        Text(text = dto.name, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = OnBackground, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+
+        ExerciseDetailPreview(dto = dto)
     }
 
     Text(text = "Configurá las series para este ejercicio:", color = MutedGray, fontSize = 13.sp, modifier = Modifier.padding(bottom = 12.dp))
@@ -479,6 +582,105 @@ private fun FormField(label: String, value: String, onChange: (String) -> Unit, 
                 focusedTextColor     = OnBackground,
                 unfocusedTextColor   = OnBackground
             )
+        )
+    }
+}
+
+@OptIn(ExperimentalGlideComposeApi::class)
+@Composable
+private fun ExercisePreviewStack(dto: FreeExerciseDto) {
+    val imagePaths = dto.images.take(2)
+
+    Column(
+        modifier = Modifier
+            .width(96.dp)
+            .height(96.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        repeat(2) { index ->
+            val imagePath = imagePaths.getOrNull(index)
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(SurfaceVariant),
+                contentAlignment = Alignment.Center
+            ) {
+                if (!imagePath.isNullOrBlank()) {
+                    GlideImage(
+                        model = ExerciseImageRepository.IMAGE_BASE_URL + imagePath,
+                        contentDescription = dto.name,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Text("💪", fontSize = 18.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExerciseDetailPreview(dto: FreeExerciseDto) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = BackgroundDark),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            ExercisePreviewStack(dto = dto)
+
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = dto.name,
+                    color = OnBackground,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                val muscleText = dto.primaryMuscles.take(2).joinToString(" • ") { translateMuscle(it) }
+                if (muscleText.isNotBlank()) {
+                    Text(
+                        text = muscleText,
+                        color = PurplePrimary,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                    dto.equipment?.takeIf { it.isNotBlank() }?.let { ExerciseMetaChip(it) }
+                    dto.category.takeIf { it.isNotBlank() }?.let { ExerciseMetaChip(it) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExerciseMetaChip(text: String) {
+    Surface(
+        shape = RoundedCornerShape(50),
+        color = SurfaceVariant
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            color = OnBackground,
+            fontSize = 11.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
