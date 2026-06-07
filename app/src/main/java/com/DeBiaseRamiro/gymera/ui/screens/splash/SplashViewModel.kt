@@ -53,7 +53,12 @@ class SplashViewModel @Inject constructor(
             }
 
             // Nivel 2: Firestore — busca directo en la subcolección
-            val cloudRoutine = firestoreRepository.fetchRoutineFromCloud(user.uid)
+            val cloudRoutine = try {
+                firestoreRepository.fetchRoutineFromCloud(user.uid)
+            } catch (e: Exception) {
+                android.util.Log.w("GYM_SPLASH", "Firestore no disponible: ${e.message}")
+                null
+            }
             if (cloudRoutine != null) {
                 routineRepository.saveRoutine(cloudRoutine, user.uid)
                 android.util.Log.d("GYM_NAV", "Splash — user: ${user?.uid}")
