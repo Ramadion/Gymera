@@ -65,7 +65,7 @@ fun SplashScreen(
             Image(
                 painter = painterResource(id = R.drawable.ic_gymera_logo),
                 contentDescription = "Logo Gymera",
-                modifier = Modifier.size(120.dp)
+                modifier = Modifier.size(160.dp)
             )
             Spacer(modifier = Modifier.height(16.dp))
             Text(
