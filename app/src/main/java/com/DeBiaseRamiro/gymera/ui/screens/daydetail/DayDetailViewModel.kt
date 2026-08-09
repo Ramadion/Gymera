@@ -7,6 +7,7 @@ import com.DeBiaseRamiro.gymera.data.repository.ExerciseImageRepository
 import com.DeBiaseRamiro.gymera.domain.model.Exercise
 import com.DeBiaseRamiro.gymera.domain.model.WorkoutDay
 import com.DeBiaseRamiro.gymera.domain.repository.RoutineRepository
+import com.DeBiaseRamiro.gymera.ui.screens.search.buildSearchMatcher
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.async
@@ -62,8 +63,9 @@ class DayDetailViewModel @Inject constructor(
         var result = all
 
         if (query.isNotBlank()) {
-            val normalizedQuery = query.trim().lowercase()
-            result = result.filter { it.name.lowercase().contains(normalizedQuery) }
+            // Busca en inglés (nombres) y en español (músculos/equipos)
+            val matches = buildSearchMatcher(query)
+            result = result.filter(matches)
         }
 
         if (muscle != null) {

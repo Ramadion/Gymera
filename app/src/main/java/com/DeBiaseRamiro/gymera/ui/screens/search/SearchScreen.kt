@@ -31,6 +31,8 @@ import com.bumptech.glide.integration.compose.GlideImage
 import com.DeBiaseRamiro.gymera.data.remote.dto.FreeExerciseDto
 import com.DeBiaseRamiro.gymera.data.repository.ExerciseImageRepository
 import com.DeBiaseRamiro.gymera.ui.screens.daydetail.encodeForNav
+import com.DeBiaseRamiro.gymera.ui.screens.exercisedetail.translateEquipment
+import com.DeBiaseRamiro.gymera.ui.screens.exercisedetail.translateMuscle
 import com.DeBiaseRamiro.gymera.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -133,7 +135,7 @@ fun SearchScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = selectedMuscle ?: "Grupo muscular — Todos",
+                        text = selectedMuscle?.let { translateMuscle(it) } ?: "Grupo muscular — Todos",
                         color = if (selectedMuscle != null) PurplePrimary else MutedGray,
                         fontWeight = if (selectedMuscle != null) FontWeight.SemiBold
                         else FontWeight.Normal,
@@ -182,7 +184,7 @@ fun SearchScreen(
                         }
                         items(muscleGroups) { muscle ->
                             MuscleChip(
-                                label = muscle,
+                                label = translateMuscle(muscle),
                                 isSelected = selectedMuscle == muscle,
                                 onClick = {
                                     viewModel.onMuscleSelected(muscle)
@@ -353,11 +355,10 @@ private fun SearchExerciseCard(
                     maxLines = 2
                 )
 
-                // Músculo principal
+                // Músculo principal (traducido)
                 if (exercise.primaryMuscles.isNotEmpty()) {
                     Text(
-                        text = exercise.primaryMuscles.first()
-                            .replaceFirstChar { it.uppercase() },
+                        text = translateMuscle(exercise.primaryMuscles.first()),
                         fontSize = 13.sp,
                         color = PurplePrimary
                     )
@@ -367,7 +368,7 @@ private fun SearchExerciseCard(
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     SearchChip(translateLevel(exercise.level))
                     exercise.equipment?.let { equip ->
-                        if (equip.isNotBlank()) SearchChip(equip)
+                        if (equip.isNotBlank()) SearchChip(translateEquipment(equip))
                     }
                 }
             }

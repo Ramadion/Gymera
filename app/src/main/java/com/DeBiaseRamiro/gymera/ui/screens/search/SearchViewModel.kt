@@ -90,10 +90,11 @@ class SearchViewModel @Inject constructor(
     private fun filterExercises(query: String, muscle: String?): List<FreeExerciseDto> {
         var result = allExercises
 
-        // Filtro 1: por texto — busca en el nombre en inglés del ejercicio
+        // Filtro 1: por texto — busca en el nombre en inglés Y en palabras clave
+        // en español (músculos y equipos). Ver SpanishSearch.kt
         if (query.isNotBlank()) {
-            val q = query.trim().lowercase()
-            result = result.filter { it.name.lowercase().contains(q) }
+            val matches = buildSearchMatcher(query)
+            result = result.filter(matches)
         }
 
         // Filtro 2: por grupo muscular — busca en primaryMuscles
