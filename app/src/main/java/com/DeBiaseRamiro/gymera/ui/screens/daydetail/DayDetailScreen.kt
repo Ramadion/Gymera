@@ -129,15 +129,41 @@ fun DayDetailScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = {
-                    viewModel.loadAllExercisesForSearch()
-                    showAddSheet = true
-                },
-                containerColor = PurplePrimary,
-                contentColor   = Color.White
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Icon(imageVector = Icons.Default.Add, contentDescription = "Agregar ejercicio")
+                if (exercises.isNotEmpty()) {
+                    FloatingActionButton(
+                        onClick = {
+                            val first = exercises.first()
+                            val route = "exercise_detail" +
+                                "?dayId=${workoutDay.id.encodeForNav()}" +
+                                "&exerciseId=${first.id.encodeForNav()}" +
+                                "&nameEn=${first.nameEn.encodeForNav()}" +
+                                "&nameEs=${first.name.encodeForNav()}" +
+                                "&sets=${first.sets}" +
+                                "&reps=${first.reps.encodeForNav()}" +
+                                "&restSeconds=${first.restSeconds}" +
+                                "&notes=${first.notes.encodeForNav()}"
+                            onExerciseClick(route)
+                        },
+                        containerColor = GreenSuccess,
+                        contentColor   = Color.White
+                    ) {
+                        Icon(imageVector = Icons.Default.PlayArrow, contentDescription = "Iniciar entrenamiento")
+                    }
+                }
+                FloatingActionButton(
+                    onClick = {
+                        viewModel.loadAllExercisesForSearch()
+                        showAddSheet = true
+                    },
+                    containerColor = PurplePrimary,
+                    contentColor   = Color.White
+                ) {
+                    Icon(imageVector = Icons.Default.Add, contentDescription = "Agregar ejercicio")
+                }
             }
         },
         containerColor = BackgroundDark
@@ -238,7 +264,9 @@ fun DayDetailScreen(
                                     dragHandleModifier = dragModifier,
                                     onClick = {
                                         val route = "exercise_detail" +
-                                                "?nameEn=${exercise.nameEn.encodeForNav()}" +
+                                                "?dayId=${workoutDay.id.encodeForNav()}" +
+                                                "&exerciseId=${exercise.id.encodeForNav()}" +
+                                                "&nameEn=${exercise.nameEn.encodeForNav()}" +
                                                 "&nameEs=${exercise.name.encodeForNav()}" +
                                                 "&sets=${exercise.sets}" +
                                                 "&reps=${exercise.reps.encodeForNav()}" +

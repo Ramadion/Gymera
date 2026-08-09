@@ -120,39 +120,123 @@ class ExerciseImageRepository @Inject constructor(
     }
 
     // ── findBestMatch ─────────────────────────────────────────────────────────
-    // Algoritmo de fuzzy matching de 4 niveles de prioridad.
+    // Matcher por SCORE (reemplazó al fuzzy matching de 4 niveles).
     //
-    // Necesario porque Gemini genera nombres en inglés que no siempre coinciden
-    // exactamente con el campo "name" del JSON.
-    // Ejemplo: Gemini manda "barbell bench press" pero el JSON tiene
-    //          "Barbell Bench Press - Medium Grip".
+    // El algoritmo anterior devolvía la PRIMERA coincidencia "suficiente"
+    // (`.find {}`), lo que provocaba dos bugs conocidos:
     //
-    // Los 4 niveles garantizan que la mayoría de los ejercicios encuentren imagen.
+    //   1. "overhead barbell press" / "barbell overhead press" (press militar)
+    //      coincidía con "Barbell Bench Press - Medium Grip" porque comparten
+    //      las palabras {barbell, press} y el bench press aparece antes en el
+    //      JSON (orden alfabético). El nuevo matcher elige el MEJOR score, así
+    //      que gana "Barbell Shoulder Press".
+    //
+    //   2. Variantes de "skull crusher" (ej: "ez bar skull crusher") no
+    //      encontraban "EZ-Bar Skullcrusher" por la palabra compuesta
+    //      ("skullcrusher" vs "skull crusher") y por el guión.
+    //
+    // Algoritmo nuevo:
+    //   - Normaliza el query y TODOS los nombres por igual (guiones, slashes,
+    //     paréntesis, comas → espacios) para que "EZ-Bar Skullcrusher" ==
+    //     "ez bar skullcrusher".
+    //   - Puntúa cada ejercicio por las palabras del query que coinciden:
+    //       * token IGUAL = 2 pts
+    //       * token por substring/prefix = 1 pt (captura "skullcrusher" vs
+    //         "skull crusher")
+    //   - Se queda con el de mayor score. Empates → mayor cobertura del query,
+    //     y luego menos tokens extra (match más específico).
+    //   - Queries de una sola palabra (ej: "deadlift", "squat", "dips") aceptan
+    //     un hit de substring para no romper esos casos.
     // ─────────────────────────────────────────────────────────────────────────
     private fun findBestMatch(query: String, exercises: List<FreeExerciseDto>): FreeExerciseDto? {
-        // Nivel 1: match exacto ignorando mayúsculas
-        // "dumbbell biceps curl" = "Dumbbell Biceps Curl"
-        exercises.find { it.name.lowercase() == query }?.let { return it }
-
-        // Nivel 2: el nombre del repositorio CONTIENE el query completo
-        // "bench press" encontrado en "Barbell Bench Press - Medium Grip"
-        exercises.find { it.name.lowercase().contains(query) }?.let { return it }
-
-        // Nivel 3: el query CONTIENE el nombre del repositorio
-        // "dumbbell romanian deadlift" contiene "Romanian Deadlift"
-        exercises.find { query.contains(it.name.lowercase()) }?.let { return it }
-
-        // Nivel 4: al menos 2 palabras clave en común (excluyendo stop words)
-        // "barbell squat" y "Barbell Squat (on knees)" comparten "barbell" y "squat"
         val stopWords = setOf("the", "a", "an", "with", "on", "in", "at", "to", "for", "of", "and")
-        val queryWords = query.split(" ").filter { it.length > 2 && it !in stopWords }.toSet()
 
-        return exercises.find { exercise ->
-            val exerciseWords = exercise.name.lowercase()
+        val queryTokens = normalizeName(query)
+            .split(" ")
+            .filter { it.length >= 3 && it !in stopWords }
+        if (queryTokens.isEmpty()) return null
+
+        // Busca el mejor candidato en UNA sola pasada (no devuelve el primero).
+        var best: MatchCandidate? = null
+
+        for (exercise in exercises) {
+            val nameTokens = normalizeName(exercise.name)
                 .split(" ")
-                .filter { it.length > 2 && it !in stopWords }
-                .toSet()
-            (queryWords intersect exerciseWords).size >= 2
+                .filter { it.length >= 3 && it !in stopWords }
+            if (nameTokens.isEmpty()) continue
+
+            var score = 0.0
+            var matchedTokens = 0
+
+            for (queryToken in queryTokens) {
+                var hit = 0.0
+                for (nameToken in nameTokens) {
+                    if (queryToken == nameToken) {
+                        hit = 2.0
+                    } else if (
+                        queryToken.length >= 4 && nameToken.length >= 4 &&
+                        (queryToken in nameToken ||
+                         nameToken in queryToken ||
+                         queryToken.startsWith(nameToken) ||
+                         nameToken.startsWith(queryToken))
+                    ) {
+                        hit = 1.0
+                    }
+                    if (hit > 0) break
+                }
+                if (hit > 0) {
+                    score += hit
+                    matchedTokens++
+                }
+            }
+
+            if (matchedTokens >= 1) {
+                val coverage = matchedTokens.toDouble() / queryTokens.size
+                val candidate = MatchCandidate(score, coverage, matchedTokens, nameTokens.size, exercise)
+                if (best == null || candidate.betterThan(best)) best = candidate
+            }
+        }
+
+        val winner = best ?: return null
+
+        return when {
+            // Multi-word: requiere ≥2 tokens, score decente y ≥50% de cobertura.
+            queryTokens.size >= 2 ->
+                if (winner.matchedTokens >= 2 && winner.score >= 2.5 && winner.coverage >= 0.5)
+                    winner.exercise else null
+            // Single-word (deadlift, squat, dips, ...): un hit alcanza.
+            else ->
+                if (winner.score >= 2) winner.exercise else null
+        }
+    }
+
+    // Normaliza un nombre para comparar igual a ambos lados: minúsculas y los
+    // separadores (guión, barra, paréntesis, comas, puntos) → espacios.
+    private fun normalizeName(name: String): String =
+        name.lowercase()
+            .replace("(", " ")
+            .replace(")", " ")
+            .replace("'", " ")
+            .replace(",", " ")
+            .replace(".", " ")
+            .replace("-", " ")
+            .replace("/", " ")
+            .replace("_", " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+    // Candidato con métricas del match para comparar puntajes de forma limpia.
+    private data class MatchCandidate(
+        val score: Double,
+        val coverage: Double,
+        val matchedTokens: Int,
+        val nameTokenCount: Int,
+        val exercise: FreeExerciseDto
+    ) {
+        fun betterThan(other: MatchCandidate): Boolean {
+            if (score != other.score) return score > other.score
+            if (coverage != other.coverage) return coverage > other.coverage
+            return nameTokenCount < other.nameTokenCount
         }
     }
 

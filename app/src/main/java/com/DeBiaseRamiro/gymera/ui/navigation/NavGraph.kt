@@ -23,6 +23,7 @@ import com.DeBiaseRamiro.gymera.ui.shared.SharedRoutineViewModel
 import com.DeBiaseRamiro.gymera.ui.screens.exercisedetail.ExerciseDetailScreen
 import com.DeBiaseRamiro.gymera.ui.screens.profile.ProfileScreen
 import com.DeBiaseRamiro.gymera.ui.screens.search.SearchScreen
+import com.DeBiaseRamiro.gymera.ui.screens.daydetail.encodeForNav
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -250,13 +251,17 @@ fun NavGraph(isUserLoggedIn: Boolean) {
             // ── Exercise Detail ───────────────────────────────────────────
             composable(
                 route = "exercise_detail" +
-                        "?nameEn={nameEn}" +
+                        "?dayId={dayId}" +
+                        "&exerciseId={exerciseId}" +
+                        "&nameEn={nameEn}" +
                         "&nameEs={nameEs}" +
                         "&sets={sets}" +
                         "&reps={reps}" +
                         "&restSeconds={restSeconds}" +
                         "&notes={notes}",
                 arguments = listOf(
+                    navArgument("dayId")       { type = NavType.StringType; defaultValue = "" },
+                    navArgument("exerciseId")  { type = NavType.StringType; defaultValue = "" },
                     navArgument("nameEn")      { type = NavType.StringType; defaultValue = "" },
                     navArgument("nameEs")      { type = NavType.StringType; defaultValue = "" },
                     navArgument("sets")        { type = NavType.IntType;    defaultValue = 0  },
@@ -266,14 +271,50 @@ fun NavGraph(isUserLoggedIn: Boolean) {
                 )
             ) { backStackEntry ->
                 val args = backStackEntry.arguments!!
+                val dayId = args.getString("dayId") ?: ""
+                val exerciseId = args.getString("exerciseId") ?: ""
+
+                val currentDay = currentRoutine?.workoutDays?.find { it.id == dayId }
+                val currentIndex = currentDay?.exercises?.indexOfFirst { it.id == exerciseId } ?: -1
+                val exerciseCount = currentDay?.exercises?.size ?: 0
+                val hasNext = currentIndex >= 0 && currentIndex < exerciseCount - 1
+
+                val onNextAction: (() -> Unit)? = if (currentIndex >= 0 && exerciseCount > 0) {
+                    if (hasNext) {
+                        val next = currentDay!!.exercises[currentIndex + 1]
+                        {
+                            val route = "exercise_detail" +
+                                "?dayId=${dayId.encodeForNav()}" +
+                                "&exerciseId=${next.id.encodeForNav()}" +
+                                "&nameEn=${next.nameEn.encodeForNav()}" +
+                                "&nameEs=${next.name.encodeForNav()}" +
+                                "&sets=${next.sets}" +
+                                "&reps=${next.reps.encodeForNav()}" +
+                                "&restSeconds=${next.restSeconds}" +
+                                "&notes=${next.notes.encodeForNav()}"
+                            navController.navigate(route) {
+                                popUpTo("exercise_detail") { inclusive = true }
+                            }
+                        }
+                    } else {
+                        { navController.popBackStack() }
+                    }
+                } else null
+
+                val isLastExercise = currentIndex >= 0 && currentIndex == exerciseCount - 1
+
                 ExerciseDetailScreen(
-                    nameEn      = args.getString("nameEn")      ?: "",
-                    nameEs      = args.getString("nameEs")      ?: "",
-                    sets        = args.getInt("sets"),
-                    reps        = args.getString("reps")        ?: "",
-                    restSeconds = args.getInt("restSeconds"),
-                    notes       = args.getString("notes")       ?: "",
-                    onBack      = { navController.popBackStack() }
+                    dayId        = dayId,
+                    exerciseId   = exerciseId,
+                    nameEn       = args.getString("nameEn")      ?: "",
+                    nameEs       = args.getString("nameEs")      ?: "",
+                    sets         = args.getInt("sets"),
+                    reps         = args.getString("reps")        ?: "",
+                    restSeconds  = args.getInt("restSeconds"),
+                    notes        = args.getString("notes")       ?: "",
+                    onBack       = { navController.popBackStack() },
+                    onNextAction = onNextAction,
+                    isLastExercise = isLastExercise
                 )
             }
 

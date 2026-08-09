@@ -160,17 +160,7 @@ fun StepBirthDate(
     var selectedDateText  by remember { mutableStateOf("") }
     var selectedMillis    by remember { mutableStateOf<Long?>(null) }
 
-    // Rango seleccionable: entre 100 años atrás y 10 años atrás
-    val datePickerState = rememberDatePickerState(
-        selectableDates = object : SelectableDates {
-            override fun isSelectableDate(utcTimeMillis: Long): Boolean {
-                val now    = System.currentTimeMillis()
-                val minAge = now - (100L * 365 * 24 * 60 * 60 * 1000)
-                val maxAge = now - (10L  * 365 * 24 * 60 * 60 * 1000)
-                return utcTimeMillis in minAge..maxAge
-            }
-        }
-    )
+    val datePickerState = rememberDatePickerState()
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(
@@ -428,7 +418,7 @@ fun StepLimitations(onAnswer: (String) -> Unit) {
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(
-            text       = "¿Tenés alguna lesión o limitación física?",
+            text       = "Indica mas contexto para la IA, por ejemplo que dias de descansos queres",
             color      = OnBackground,
             fontSize   = 24.sp,
             fontWeight = FontWeight.Bold,

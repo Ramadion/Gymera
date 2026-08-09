@@ -56,11 +56,6 @@ class FormViewModel @Inject constructor(
     }
 
     fun setBirthDate(millis: Long) {
-        val age = calculateAge(millis)
-        when {
-            age < 10  -> { _birthDateError.value = "Debés tener al menos 10 años" ; return }
-            age > 100 -> { _birthDateError.value = "Ingresá una fecha de nacimiento válida" ; return }
-        }
         _birthDateError.value = null
         birthDateMs = millis
         nextStep()

@@ -7,6 +7,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.NavigateNext
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -36,6 +38,10 @@ fun ExerciseDetailScreen(
     restSeconds: Int,
     notes: String,
     onBack: () -> Unit,
+    onNextAction: (() -> Unit)? = null,
+    isLastExercise: Boolean = false,
+    dayId: String = "",
+    exerciseId: String = "",
     viewModel: ExerciseDetailViewModel = hiltViewModel()
 ) {
     LaunchedEffect(nameEn) {
@@ -73,6 +79,19 @@ fun ExerciseDetailScreen(
                     containerColor = MaterialTheme.colorScheme.surface
                 )
             )
+        },
+        floatingActionButton = {
+            if (onNextAction != null) {
+                FloatingActionButton(
+                    onClick = onNextAction,
+                    containerColor = MaterialTheme.colorScheme.primary
+                ) {
+                    Icon(
+                        imageVector = if (isLastExercise) Icons.Default.Check else Icons.AutoMirrored.Filled.NavigateNext,
+                        contentDescription = if (isLastExercise) "Finalizar" else "Siguiente"
+                    )
+                }
+            }
         }
     ) { paddingValues ->
 
