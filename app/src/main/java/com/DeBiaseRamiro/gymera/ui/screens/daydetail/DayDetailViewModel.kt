@@ -143,6 +143,15 @@ class DayDetailViewModel @Inject constructor(
         }
     }
 
+    // ── updateDescription ─────────────────────────────────────────────────
+    // Actualiza la descripción/enfoque del día en Room. Puede ser vacía.
+    // Room re-emite el Flow de SharedRoutineViewModel y la UI se refresca sola.
+    fun updateDescription(description: String) {
+        viewModelScope.launch {
+            routineRepository.setWorkoutDayMuscleFocus(currentDayId, description)
+        }
+    }
+
     // ── addExercise ───────────────────────────────────────────────────────
     // Agrega el ejercicio al final de la lista local y persiste en Room.
     // La imagen se carga en paralelo sin bloquear la UI.

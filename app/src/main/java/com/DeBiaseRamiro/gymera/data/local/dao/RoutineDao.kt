@@ -70,6 +70,19 @@ interface RoutineDao {
     @Query("UPDATE exercise_assignment SET orderInDay = :order WHERE id = :exerciseId")
     suspend fun updateExerciseOrder(exerciseId: String, order: Int)
 
+    // Marca un día como descanso (1) o entrenamiento (0) sin tocar sus ejercicios.
+    // Los ejercicios en silencio quedan guardados y vuelven a aparecer al reactivar.
+    @Query("UPDATE workout_day SET isRestDay = :isRest WHERE id = :dayId")
+    suspend fun updateWorkoutDayIsRest(dayId: String, isRest: Int)
+
+    // Actualiza la descripción/enfoque del día (muscleFocus). Puede ser vacía.
+    @Query("UPDATE workout_day SET muscleFocus = :muscleFocus WHERE id = :dayId")
+    suspend fun updateWorkoutDayMuscleFocus(dayId: String, muscleFocus: String)
+
+    // Mueve todos los ejercicios de un día a otro (cambia su workoutDayId).
+    @Query("UPDATE exercise_assignment SET workoutDayId = :newDayId WHERE workoutDayId = :oldDayId")
+    suspend fun reassignExercises(oldDayId: String, newDayId: String)
+
     // ── DELETE ────────────────────────────────────────────────────────────
 
     @Query("DELETE FROM routine WHERE userUid = :uid AND isActive = 0")
@@ -80,4 +93,9 @@ interface RoutineDao {
 
     @Query("DELETE FROM exercise_assignment WHERE id = :exerciseId")
     suspend fun deleteExercise(exerciseId: String)
+
+    // Borra todos los ejercicios de un día, pero el día NO se elimina:
+    // queda como entrenamiento con 0 ejercicios.
+    @Query("DELETE FROM exercise_assignment WHERE workoutDayId = :dayId")
+    suspend fun deleteExercisesForDay(dayId: String)
 }

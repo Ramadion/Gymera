@@ -357,4 +357,18 @@ class DayDetailViewModelTest {
 
         assertEquals(ExerciseImageState.Error, viewModel.imageStates.value["ex-1"])
     }
+
+    @Test
+    fun `updateDescription llama al repositorio con el dia y texto correctos`() = runTest {
+        coEvery { mockRoutineRepository.setWorkoutDayMuscleFocus("day-1", "Pecho y Triceps") } just Runs
+
+        val viewModel = createViewModel()
+        viewModel.initializeDay(buildWorkoutDay(emptyList())) // currentDayId = "day-1"
+        viewModel.updateDescription("Pecho y Triceps")
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) {
+            mockRoutineRepository.setWorkoutDayMuscleFocus("day-1", "Pecho y Triceps")
+        }
+    }
 }

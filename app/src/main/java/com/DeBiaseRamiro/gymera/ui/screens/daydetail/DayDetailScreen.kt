@@ -65,6 +65,8 @@ fun DayDetailScreen(
     val selectedMuscle by viewModel.selectedMuscle.collectAsState()
 
     var showAddSheet by remember { mutableStateOf(false) }
+    var showDescriptionDialog by remember { mutableStateOf(false) }
+    var editDescriptionText by remember { mutableStateOf(workoutDay.muscleFocus) }
 
     // ── Confirmación de borrado ───────────────────────────────────────────
     // Al deslizar, guardamos el ejercicio aquí en vez de borrarlo directo.
@@ -104,6 +106,49 @@ fun DayDetailScreen(
         )
     }
 
+    // ── Editar descripción del día (opcional) ────────────────────────────
+    if (showDescriptionDialog) {
+        AlertDialog(
+            onDismissRequest = { showDescriptionDialog = false },
+            containerColor   = SurfaceDark,
+            title = {
+                Text(
+                    text = "Descripción de ${workoutDay.dayName}",
+                    color = OnBackground,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                OutlinedTextField(
+                    value       = editDescriptionText,
+                    onValueChange = { editDescriptionText = it },
+                    placeholder = { Text("Ej: Pecho y Triceps", color = MutedGray) },
+                    singleLine  = true,
+                    modifier    = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor   = PurplePrimary,
+                        unfocusedBorderColor = MutedGray.copy(alpha = 0.3f),
+                        focusedTextColor     = OnBackground,
+                        unfocusedTextColor   = OnBackground
+                    )
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.updateDescription(editDescriptionText.trim())
+                    showDescriptionDialog = false
+                }) {
+                    Text("Guardar", color = PurplePrimary, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDescriptionDialog = false }) {
+                    Text("Cancelar", color = MutedGray)
+                }
+            }
+        )
+    }
+
     val lazyListState = rememberLazyListState()
     val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
         viewModel.moveExercise(from.index, to.index)
@@ -118,10 +163,23 @@ fun DayDetailScreen(
                     }
                 },
                 title = {
-                    Column {
-                        Text(text = workoutDay.dayName, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBackground)
-                        if (workoutDay.muscleFocus.isNotBlank()) {
-                            Text(text = workoutDay.muscleFocus, fontSize = 12.sp, color = PurplePrimary)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column {
+                            Text(text = workoutDay.dayName, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBackground)
+                            if (workoutDay.muscleFocus.isNotBlank()) {
+                                Text(text = workoutDay.muscleFocus, fontSize = 12.sp, color = PurplePrimary)
+                            }
+                        }
+                        IconButton(onClick = {
+                            editDescriptionText = workoutDay.muscleFocus
+                            showDescriptionDialog = true
+                        }) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "Editar descripción",
+                                tint = MutedGray,
+                                modifier = Modifier.size(18.dp)
+                            )
                         }
                     }
                 },

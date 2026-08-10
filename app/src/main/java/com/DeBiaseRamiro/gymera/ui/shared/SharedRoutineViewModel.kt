@@ -116,4 +116,30 @@ class SharedRoutineViewModel @Inject constructor(
 
     fun setUserProfile(profile: UserProfile) { _pendingUserProfile.value = profile }
     fun clearUserProfile()                   { _pendingUserProfile.value = null }
+
+    // ── Edición de días (RoutineScreen) ─────────────────────────────────────────
+    // Room es la fuente de verdad: la emisión del Flow que ya está escuchando el
+    // init{} actualiza _currentRoutine automáticamente cuando estas queries cambian
+    // workout_day o exercise_assignment (el JOIN observa las tres tablas).
+
+    // Marca un día como descanso (true) o entrenamiento (false).
+    // Los ejercicios del día NO se borran: quedan guardados y reaparecen al reactivar.
+    fun setWorkoutDayRest(dayId: String, isRest: Boolean) {
+        viewModelScope.launch { routineRepository.setWorkoutDayRest(dayId, isRest) }
+    }
+
+    // Borra todos los ejercicios del día. El día NO desaparece: queda como
+    // entrenamiento con 0 ejercicios.
+    fun clearExercisesFromDay(dayId: String) {
+        viewModelScope.launch { routineRepository.clearExercisesFromDay(dayId) }
+    }
+
+    // Mueve los ejercicios de un día a un día de descanso. El día origen NO se
+    // borra: pasa a ser día de descanso (queda vacío). El destino pasa a ser
+    // de entrenamiento y recibe los ejercicios.
+    fun moveExercisesToRestDay(fromDayId: String, toDayId: String) {
+        viewModelScope.launch {
+            routineRepository.moveExercisesToRestDay(fromDayId, toDayId)
+        }
+    }
 }

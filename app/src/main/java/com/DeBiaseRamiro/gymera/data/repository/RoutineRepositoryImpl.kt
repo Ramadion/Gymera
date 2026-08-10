@@ -221,6 +221,41 @@ class RoutineRepositoryImpl @Inject constructor(
         )
     }
 
+    // ── Edición de días ──────────────────────────────────────────────────
+
+    // Solo flipea el flag: los ejercicios del día quedan intactos en Room,
+    // ocultos mientras el día es descanso.
+    override suspend fun setWorkoutDayRest(dayId: String, isRest: Boolean) {
+        routineDao.updateWorkoutDayIsRest(dayId, if (isRest) 1 else 0)
+    }
+
+    override suspend fun setWorkoutDayMuscleFocus(dayId: String, muscleFocus: String) {
+        routineDao.updateWorkoutDayMuscleFocus(dayId, muscleFocus)
+    }
+
+    // Borra los ejercicios del día pero NO el día: queda como entrenamiento
+    // con 0 ejercicios.
+    override suspend fun clearExercisesFromDay(dayId: String) {
+        routineDao.deleteExercisesForDay(dayId)
+    }
+
+    // 1) Los ejercicios del día origen pasan al día destino.
+    // 2) El día destino deja de ser descanso y queda activo.
+    // 3) Se renumera el orden del día destino (los movidos iban con su orden viejo).
+    // 4) El día origen NO se borra: queda como día de descanso (vacío).
+    override suspend fun moveExercisesToRestDay(fromDayId: String, toDayId: String) {
+        routineDao.reassignExercises(fromDayId, toDayId)
+        routineDao.updateWorkoutDayIsRest(toDayId, 0)
+
+        val reordered = routineDao.getExercisesForDay(toDayId)
+            .sortedBy { it.orderInDay }
+        reordered.forEachIndexed { index, exercise ->
+            routineDao.updateExerciseOrder(exercise.id, index)
+        }
+
+        routineDao.updateWorkoutDayIsRest(fromDayId, 1)
+    }
+
     // ── Helpers privados ──────────────────────────────────────────────────
 
     private suspend fun buildRoutineFromEntity(entity: RoutineEntity): Routine {

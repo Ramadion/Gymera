@@ -16,6 +16,7 @@ import com.DeBiaseRamiro.gymera.ui.components.BottomNavBar
 import com.DeBiaseRamiro.gymera.ui.screens.auth.LoginScreen
 import com.DeBiaseRamiro.gymera.ui.screens.daydetail.DayDetailScreen
 import com.DeBiaseRamiro.gymera.ui.screens.form.FormScreen
+import com.DeBiaseRamiro.gymera.ui.screens.form.RegenFormScreen
 import com.DeBiaseRamiro.gymera.ui.screens.loading.LoadingScreen
 import com.DeBiaseRamiro.gymera.ui.screens.routine.RoutineScreen
 import com.DeBiaseRamiro.gymera.ui.screens.splash.SplashScreen
@@ -38,6 +39,7 @@ object Routes {
     const val SPLASH          = "splash"
     const val LOGIN           = "login"
     const val FORM_IA         = "form_ia"
+    const val REGEN_FORM      = "regen_form?goal={goal}&days={days}&level={level}"
     const val LOADING_IA      = "loading_ia"
     const val ROUTINE         = "routine"
     const val DAY_DETAIL      = "day_detail/{dayId}"
@@ -47,6 +49,8 @@ object Routes {
 
     fun dayDetail(dayId: String)           = "day_detail/$dayId"
     fun exerciseDetail(exerciseId: String) = "exercise_detail/$exerciseId"
+    fun regenForm(goal: String, days: Int, level: String) =
+        "regen_form?goal=${goal.encodeForNav()}&days=$days&level=${level.encodeForNav()}"
 }
 
 private val bottomNavRoutes = setOf(
@@ -140,6 +144,28 @@ fun NavGraph(isUserLoggedIn: Boolean) {
                 )
             }
 
+            // ── Formulario de regenerar rutina (solo datos de la rutina) ──
+            // Los datos físicos ya están en el perfil; acá solo se re-preguntan
+            // objetivo, días, tiempo, nivel e indicaciones para la IA.
+            composable(
+                route = Routes.REGEN_FORM,
+                arguments = listOf(
+                    navArgument("goal")  { type = NavType.StringType; defaultValue = "" },
+                    navArgument("days")  { type = NavType.IntType;    defaultValue = 0  },
+                    navArgument("level") { type = NavType.StringType; defaultValue = "" }
+                )
+            ) {
+                RegenFormScreen(
+                    onRegenCompleted = { userProfile ->
+                        sharedRoutineViewModel.setUserProfile(userProfile)
+                        navController.navigate(Routes.LOADING_IA) {
+                            popUpTo(Routes.REGEN_FORM) { inclusive = true }
+                        }
+                    },
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
             // ── Loading IA ────────────────────────────────────────────────
             composable(Routes.LOADING_IA) {
                 val userProfile by sharedRoutineViewModel.pendingUserProfile.collectAsState()
@@ -191,13 +217,26 @@ fun NavGraph(isUserLoggedIn: Boolean) {
                                 navController.navigate(Routes.dayDetail(dayId))
                             },
                             onGenerateNew = {
-                                // clearRoutine() ahora limpia _currentRoutine de forma
-                                // inmediata (no espera a Room), por lo que la UI
-                                // responde al instante.
-                                sharedRoutineViewModel.clearRoutine()
-                                navController.navigate(Routes.FORM_IA) {
-                                    popUpTo(Routes.ROUTINE) { inclusive = true }
-                                }
+                                // NO limpiamos la rutina todavía: se conserva en la
+                                // back stack para que "Volver" del formulario vuelva
+                                // a la rutina actual. Solo se reemplaza cuando la
+                                // nueva termina de generarse.
+                                navController.navigate(
+                                    Routes.regenForm(
+                                        goal  = currentRoutine?.goal ?: "",
+                                        days  = currentRoutine?.daysPerWeek ?: 0,
+                                        level = currentRoutine?.level ?: ""
+                                    )
+                                )
+                            },
+                            onSetDayAsRest = { dayId, isRest ->
+                                sharedRoutineViewModel.setWorkoutDayRest(dayId, isRest)
+                            },
+                            onClearExercises = { dayId ->
+                                sharedRoutineViewModel.clearExercisesFromDay(dayId)
+                            },
+                            onMoveExercisesToRestDay = { fromDayId, toDayId ->
+                                sharedRoutineViewModel.moveExercisesToRestDay(fromDayId, toDayId)
                             }
                         )
                     }
@@ -278,6 +317,7 @@ fun NavGraph(isUserLoggedIn: Boolean) {
                 val currentIndex = currentDay?.exercises?.indexOfFirst { it.id == exerciseId } ?: -1
                 val exerciseCount = currentDay?.exercises?.size ?: 0
                 val hasNext = currentIndex >= 0 && currentIndex < exerciseCount - 1
+                val hasPrevious = currentIndex >= 1
 
                 val onNextAction: (() -> Unit)? = if (currentIndex >= 0 && exerciseCount > 0) {
                     if (hasNext) {
@@ -301,6 +341,26 @@ fun NavGraph(isUserLoggedIn: Boolean) {
                     }
                 } else null
 
+                // Flecha "anterior": espejo de la siguiente. No aparece en el
+                // primer ejercicio (no tiene uno previo).
+                val onPreviousAction: (() -> Unit)? = if (hasPrevious) {
+                    val previous = currentDay!!.exercises[currentIndex - 1]
+                    {
+                        val route = "exercise_detail" +
+                            "?dayId=${dayId.encodeForNav()}" +
+                            "&exerciseId=${previous.id.encodeForNav()}" +
+                            "&nameEn=${previous.nameEn.encodeForNav()}" +
+                            "&nameEs=${previous.name.encodeForNav()}" +
+                            "&sets=${previous.sets}" +
+                            "&reps=${previous.reps.encodeForNav()}" +
+                            "&restSeconds=${previous.restSeconds}" +
+                            "&notes=${previous.notes.encodeForNav()}"
+                        navController.navigate(route) {
+                            popUpTo("exercise_detail") { inclusive = true }
+                        }
+                    }
+                } else null
+
                 val isLastExercise = currentIndex >= 0 && currentIndex == exerciseCount - 1
 
                 ExerciseDetailScreen(
@@ -314,6 +374,9 @@ fun NavGraph(isUserLoggedIn: Boolean) {
                     notes        = args.getString("notes")       ?: "",
                     onBack       = { navController.popBackStack() },
                     onNextAction = onNextAction,
+                    onPreviousAction = onPreviousAction,
+                    currentPosition = if (currentIndex >= 0) currentIndex + 1 else 0,
+                    totalExercises  = exerciseCount,
                     isLastExercise = isLastExercise
                 )
             }

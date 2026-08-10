@@ -7,6 +7,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.NavigateBefore
 import androidx.compose.material.icons.automirrored.filled.NavigateNext
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.FitnessCenter
@@ -18,6 +19,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.shape.CircleShape
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
 import com.bumptech.glide.integration.compose.GlideImage
@@ -39,6 +41,9 @@ fun ExerciseDetailScreen(
     notes: String,
     onBack: () -> Unit,
     onNextAction: (() -> Unit)? = null,
+    onPreviousAction: (() -> Unit)? = null,
+    currentPosition: Int = 0,
+    totalExercises: Int = 0,
     isLastExercise: Boolean = false,
     dayId: String = "",
     exerciseId: String = "",
@@ -81,15 +86,61 @@ fun ExerciseDetailScreen(
             )
         },
         floatingActionButton = {
-            if (onNextAction != null) {
-                FloatingActionButton(
-                    onClick = onNextAction,
-                    containerColor = MaterialTheme.colorScheme.primary
+            // Barra de navegación entre ejercicios del día: flecha anterior
+            // (opuesta a la de siguiente), puntitos de progreso al centro y
+            // flecha de siguiente. Solo aparece cuando hay contexto de día.
+            if (onNextAction != null || onPreviousAction != null || totalExercises > 0) {
+                // FIX: Scaffold coloca el slot del FAB (FabPosition.End) desplazado
+                // 16dp hacia la izquierda cuando el contenido es de ancho completo.
+                // padding(start 56, end 24) compensa ese desplazamiento para que las
+                // dos flechas queden a la MISMA distancia de sus bordes (~40dp).
+                val fabColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 56.dp, end = 24.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = if (isLastExercise) Icons.Default.Check else Icons.AutoMirrored.Filled.NavigateNext,
-                        contentDescription = if (isLastExercise) "Finalizar" else "Siguiente"
-                    )
+                    if (onPreviousAction != null) {
+                        FloatingActionButton(
+                            onClick = onPreviousAction,
+                            containerColor = fabColor,
+                            contentColor   = MaterialTheme.colorScheme.onPrimary
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.NavigateBefore,
+                                contentDescription = "Anterior"
+                            )
+                        }
+                    } else {
+                        // Mantiene la guía de puntitos centrada en el primer ejercicio
+                        Spacer(modifier = Modifier.size(56.dp))
+                    }
+
+                    Box(
+                        modifier = Modifier.weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (totalExercises > 0) {
+                            GuideDots(count = totalExercises, current = currentPosition)
+                        }
+                    }
+
+                    if (onNextAction != null) {
+                        FloatingActionButton(
+                            onClick = onNextAction,
+                            containerColor = fabColor,
+                            contentColor   = MaterialTheme.colorScheme.onPrimary
+                        ) {
+                            Icon(
+                                imageVector = if (isLastExercise) Icons.Default.Check else Icons.AutoMirrored.Filled.NavigateNext,
+                                contentDescription = if (isLastExercise) "Finalizar" else "Siguiente"
+                            )
+                        }
+                    } else {
+                        Spacer(modifier = Modifier.size(56.dp))
+                    }
                 }
             }
         }
@@ -229,6 +280,31 @@ fun ExerciseDetailScreen(
 }
 
 // ── COMPONENTES AUXILIARES ────────────────────────────────────────────────────
+
+/**
+ * Guía de progreso muy sutil: un puntito por ejercicio del día.
+ * El actual se marca apenas más visible que el resto.
+ */
+@Composable
+private fun GuideDots(count: Int, current: Int) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        repeat(count) { index ->
+            val active = index == current - 1
+            Box(
+                modifier = Modifier
+                    .size(if (active) 8.dp else 6.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (active) MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                        else MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
+                    )
+            )
+        }
+    }
+}
 
 @Composable
 private fun ExerciseChip(label: String) {

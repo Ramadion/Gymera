@@ -202,4 +202,44 @@ class SharedRoutineViewModelTest {
         coVerify(exactly = 0) { mockRoutineRepository.deactivateActiveRoutine(any()) }
         coVerify(exactly = 0) { mockFirestoreRepository.deactivateCloudRoutine(any()) }
     }
+
+    // ── setWorkoutDayRest / clearExercisesFromDay ─────────────────────────
+
+    @Test
+    fun `setWorkoutDayRest llama al repositorio con la bandera correcta`() = runTest {
+        every { mockRoutineRepository.getActiveRoutineFlow("test-uid") } returns flowOf(null)
+        coEvery { mockRoutineRepository.setWorkoutDayRest("day-1", true) } just Runs
+
+        val viewModel = createViewModel()
+        viewModel.setWorkoutDayRest("day-1", true)
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { mockRoutineRepository.setWorkoutDayRest("day-1", true) }
+    }
+
+    @Test
+    fun `clearExercisesFromDay llama al repositorio`() = runTest {
+        every { mockRoutineRepository.getActiveRoutineFlow("test-uid") } returns flowOf(null)
+        coEvery { mockRoutineRepository.clearExercisesFromDay("day-1") } just Runs
+
+        val viewModel = createViewModel()
+        viewModel.clearExercisesFromDay("day-1")
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { mockRoutineRepository.clearExercisesFromDay("day-1") }
+    }
+
+    @Test
+    fun `moveExercisesToRestDay llama al repositorio`() = runTest {
+        every { mockRoutineRepository.getActiveRoutineFlow("test-uid") } returns flowOf(null)
+        coEvery { mockRoutineRepository.moveExercisesToRestDay("day-1", "day-rest") } just Runs
+
+        val viewModel = createViewModel()
+        viewModel.moveExercisesToRestDay("day-1", "day-rest")
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) {
+            mockRoutineRepository.moveExercisesToRestDay("day-1", "day-rest")
+        }
+    }
 }

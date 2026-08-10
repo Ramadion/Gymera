@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.DeBiaseRamiro.gymera.data.local.dao.UserProfileDao
 import com.DeBiaseRamiro.gymera.domain.model.Routine
+import com.DeBiaseRamiro.gymera.domain.model.UserPhysicalProfile
 import com.DeBiaseRamiro.gymera.domain.model.UserProfile
 import com.DeBiaseRamiro.gymera.domain.repository.FirestoreRepository
 import com.DeBiaseRamiro.gymera.domain.repository.RoutineRepository
@@ -38,8 +39,22 @@ class LoadingViewModel @Inject constructor(
                 val uid = firebaseAuth.currentUser?.uid
                     ?: throw Exception("Usuario no autenticado")
 
+                // 0. Recuperamos el perfil físico guardado en Room (peso, altura,
+                //    edad, género) para que Gemini lo tenga en cuenta. Se lee solo
+                //    al inicio del login; después se edita desde ProfileScreen.
+                val physicalProfile = userProfileDao.getProfile(uid)?.let { entity ->
+                    UserPhysicalProfile(
+                        uid         = entity.uid,
+                        age         = entity.age,
+                        weightKg    = entity.weightKg,
+                        heightCm    = entity.heightCm,
+                        gender      = entity.gender,
+                        birthDateMillis = entity.birthDateMillis
+                    )
+                }
+
                 // 1. Generamos via Gemini
-                val routine = routineRepository.generateRoutine(userProfile)
+                val routine = routineRepository.generateRoutine(userProfile, physicalProfile)
 
                 // 2. Guardamos en Room (fuente de verdad local)
                 routineRepository.saveRoutine(routine, uid)

@@ -225,6 +225,96 @@ class RoutineRepositoryImplTest {
         coVerify(exactly = 1) { mockRoutineDao.deactivateAllRoutines("test-uid") }
     }
 
+    // ── setWorkoutDayRest ─────────────────────────────────────────────────
+
+    @Test
+    fun `setWorkoutDayRest marca el dia como descanso`() = runTest {
+        coEvery { mockRoutineDao.updateWorkoutDayIsRest("day-1", 1) } just Runs
+
+        val repo = createRepository()
+        repo.setWorkoutDayRest("day-1", true)
+
+        coVerify(exactly = 1) { mockRoutineDao.updateWorkoutDayIsRest("day-1", 1) }
+    }
+
+    @Test
+    fun `setWorkoutDayRest reactiva un dia de descanso`() = runTest {
+        coEvery { mockRoutineDao.updateWorkoutDayIsRest("day-1", 0) } just Runs
+
+        val repo = createRepository()
+        repo.setWorkoutDayRest("day-1", false)
+
+        coVerify(exactly = 1) { mockRoutineDao.updateWorkoutDayIsRest("day-1", 0) }
+    }
+
+    // ── setWorkoutDayMuscleFocus ─────────────────────────────────────────
+
+    @Test
+    fun `setWorkoutDayMuscleFocus delega al DAO con el texto correcto`() = runTest {
+        coEvery { mockRoutineDao.updateWorkoutDayMuscleFocus("day-1", "Pecho y Triceps") } just Runs
+
+        val repo = createRepository()
+        repo.setWorkoutDayMuscleFocus("day-1", "Pecho y Triceps")
+
+        coVerify(exactly = 1) { mockRoutineDao.updateWorkoutDayMuscleFocus("day-1", "Pecho y Triceps") }
+    }
+
+    // ── clearExercisesFromDay ─────────────────────────────────────────────
+
+    @Test
+    fun `clearExercisesFromDay delega al DAO con el id correcto`() = runTest {
+        coEvery { mockRoutineDao.deleteExercisesForDay("day-1") } just Runs
+
+        val repo = createRepository()
+        repo.clearExercisesFromDay("day-1")
+
+        coVerify(exactly = 1) { mockRoutineDao.deleteExercisesForDay("day-1") }
+    }
+
+    // ── moveExercisesToRestDay ───────────────────────────────────────────
+
+    @Test
+    fun `moveExercisesToRestDay mueve ejercicios activa destino y deja el origen como descanso`() = runTest {
+        coEvery { mockRoutineDao.reassignExercises("day-1", "day-rest") } just Runs
+        coEvery { mockRoutineDao.updateWorkoutDayIsRest("day-rest", 0) }   just Runs
+        coEvery { mockRoutineDao.updateWorkoutDayIsRest("day-1", 1) }     just Runs
+        coEvery { mockRoutineDao.getExercisesForDay("day-rest") } returns listOf(
+            ExerciseAssignmentEntity("m1", "day-rest", "Press de banca", "bench press", "Pecho", 3, "10", 60, 0, ""),
+            ExerciseAssignmentEntity("m2", "day-rest", "Sentadilla",      "squat",        "Piernas", 4, "8",  90, 1, "")
+        )
+        coEvery { mockRoutineDao.updateExerciseOrder(any(), any()) } just Runs
+
+        val repo = createRepository()
+        repo.moveExercisesToRestDay("day-1", "day-rest")
+
+        // El orden de las operaciones importa: primero mover, luego activar
+        // el destino, y al final marcar el origen como descanso (no se borra).
+        coVerifyOrder {
+            mockRoutineDao.reassignExercises("day-1", "day-rest")
+            mockRoutineDao.updateWorkoutDayIsRest("day-rest", 0)
+            mockRoutineDao.updateWorkoutDayIsRest("day-1", 1)
+        }
+        // El destino queda renumerado de forma secuencial (0..n-1)
+        coVerify(exactly = 1) { mockRoutineDao.updateExerciseOrder("m1", 0) }
+        coVerify(exactly = 1) { mockRoutineDao.updateExerciseOrder("m2", 1) }
+    }
+
+    @Test
+    fun `moveExercisesToRestDay deja el origen como descanso aunque no haya ejercicios`() = runTest {
+        coEvery { mockRoutineDao.reassignExercises("day-1", "day-rest") } just Runs
+        coEvery { mockRoutineDao.updateWorkoutDayIsRest("day-rest", 0) }   just Runs
+        coEvery { mockRoutineDao.updateWorkoutDayIsRest("day-1", 1) }     just Runs
+        coEvery { mockRoutineDao.getExercisesForDay("day-rest") }          returns emptyList()
+        coEvery { mockRoutineDao.updateExerciseOrder(any(), any()) }       just Runs
+
+        val repo = createRepository()
+        repo.moveExercisesToRestDay("day-1", "day-rest")
+
+        // Sin ejercicios no hay nada que renumerar
+        coVerify(exactly = 0) { mockRoutineDao.updateExerciseOrder(any(), any()) }
+        coVerify(exactly = 1) { mockRoutineDao.updateWorkoutDayIsRest("day-1", 1) }
+    }
+
     // ── getActiveRoutineFlow ──────────────────────────────────────────────
 
     @Test
