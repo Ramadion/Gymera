@@ -1,12 +1,10 @@
 package com.DeBiaseRamiro.gymera.data.repository
 
-import com.DeBiaseRamiro.gymera.BuildConfig
 import com.DeBiaseRamiro.gymera.data.local.dao.RoutineDao
 import com.DeBiaseRamiro.gymera.data.local.entity.ExerciseAssignmentEntity
 import com.DeBiaseRamiro.gymera.data.local.entity.RoutineEntity
 import com.DeBiaseRamiro.gymera.data.local.entity.WorkoutDayEntity
-import com.DeBiaseRamiro.gymera.data.remote.api.GeminiApi
-import com.DeBiaseRamiro.gymera.data.remote.dto.*
+import com.DeBiaseRamiro.gymera.data.repository.ai.FailoverRoutineGenerator
 import com.DeBiaseRamiro.gymera.domain.model.*
 import com.DeBiaseRamiro.gymera.domain.repository.RoutineRepository
 import com.google.gson.Gson
@@ -17,7 +15,7 @@ import java.util.UUID
 import javax.inject.Inject
 
 class RoutineRepositoryImpl @Inject constructor(
-    private val geminiApi: GeminiApi,
+    private val aiGenerator: FailoverRoutineGenerator,
     private val routineDao: RoutineDao
 ) : RoutineRepository {
 
@@ -47,6 +45,13 @@ class RoutineRepositoryImpl @Inject constructor(
             }
         }
 
+        val exercisesPerSession = when {
+            userProfile.sessionDuration >= 90 -> "7 a 8 ejercicios"
+            userProfile.sessionDuration >= 60 -> "5 a 6 ejercicios"
+            userProfile.sessionDuration >= 45 -> "4 a 5 ejercicios"
+            else                              -> "3 a 4 ejercicios"
+        }
+
         val prompt = """
             Eres un entrenador personal experto. Genera una rutina de entrenamiento semanal
             personalizada basada en estos datos del usuario:
@@ -63,12 +68,22 @@ class RoutineRepositoryImpl @Inject constructor(
             2. Los dias de descanso tienen isRestDay=true y exercises=[].
             3. La cantidad de dias de entrenamiento debe ser EXACTAMENTE ${userProfile.daysPerWeek}.
                Los dias restantes hasta llegar a 7 deben ser descanso.
-            4. Cada ejercicio DEBE tener dos nombres:
+            4. CADA dia de entrenamiento debe tener ${exercisesPerSession}:
+               la duracion de la sesion es ${userProfile.sessionDuration} minutos y hay que cubrirla
+               con una cantidad acorde de ejercicios. NUNCA dejes poca cantidad de ejercicios.
+            5. Cada ejercicio DEBE tener dos nombres:
                - "name": el nombre en ESPAÑOL (para mostrar al usuario)
                - "nameEn": el nombre en INGLES exacto como aparece en bases de datos
                  de ejercicios internacionales (para busqueda interna)
-            5. Responde UNICAMENTE con JSON valido. Sin texto antes ni despues.
+            6. IMPORTANTE: respeta las limitaciones del usuario. Si reporta dolor o lesion
+               (ej: rodilla, espalda, hombros), NO incluyas ejercicios que los agraven.
+               Ejemplos: dolor de rodilla = nada de sentadillas, zancadas, peso muerto ni saltos.
+               Dolor de espalda = nada de peso muerto, remo pesado ni hiperextensiones.
+            7. Responde UNICAMENTE con JSON valido. Sin texto antes ni despues.
                Sin markdown, sin bloques de codigo, sin ```.
+            8. IMPORTANTE: el objeto RAIZ del JSON debe ser EXACTAMENTE {"workoutDays": [...]}.
+               No envuelvas el JSON en objetos adicionales (ej: NO uses "weeklyWorkoutPlan"
+               ni ninguna otra clave envoltorio). Solo la clave "workoutDays" en la raiz.
 
             Formato JSON exacto que debes devolver:
             {
@@ -86,7 +101,16 @@ class RoutineRepositoryImpl @Inject constructor(
                       "sets": 4,
                       "reps": "8-12",
                       "restSeconds": 90,
-                      "notes": "peso recomendado para este ejercicio teniendo en cuenta ${physicalSection.ifBlank { "" }} y ${userProfile.level}"
+                      "notes": "Ajustar el peso"
+                    },
+                    {
+                      "name": "Aperturas con mancuernas",
+                      "nameEn": "dumbbell fly",
+                      "muscleGroup": "Pecho",
+                      "sets": 3,
+                      "reps": "10-15",
+                      "restSeconds": 60,
+                      "notes": "Controlar la bajada"
                     }
                   ]
                 },
@@ -101,28 +125,9 @@ class RoutineRepositoryImpl @Inject constructor(
             }
         """.trimIndent()
 
-        val requestBody = GeminiRequest(
-            contents = listOf(
-                GeminiRequestContent(parts = listOf(GeminiRequestPart(text = prompt)))
-            )
-        )
-
-        val response = geminiApi.generateRoutine(
-            apiKey = BuildConfig.GEMINI_API_KEY,
-            body = requestBody
-        )
-
-        val jsonText = response.candidates.firstOrNull()
-            ?.content?.parts?.firstOrNull()
-            ?.text ?: throw Exception("Respuesta vacía de Gemini")
-
-        val cleanJson = jsonText.trim()
-            .removePrefix("```json")
-            .removePrefix("```")
-            .removeSuffix("```")
-            .trim()
-
-        return parseRoutineFromJson(cleanJson, userProfile)
+        return aiGenerator.generate(prompt) { json ->
+            parseRoutineFromJson(json, userProfile)
+        }
     }
 
     override suspend fun saveRoutine(routine: Routine, userUid: String) {
@@ -300,7 +305,20 @@ class RoutineRepositoryImpl @Inject constructor(
         val gson = Gson()
         val mapType = object : TypeToken<Map<String, Any>>() {}.type
         val rootMap: Map<String, Any> = gson.fromJson(json, mapType)
-        val workoutDaysRaw = rootMap["workoutDays"] as? List<*> ?: emptyList<Any>()
+
+        // Algunos proveedores (ej: Gemini) envuelven el resultado en un objeto
+        // extra como "weeklyWorkoutPlan". Si "workoutDays" no está en la raíz,
+        // buscamos dentro del primer objeto anidado.
+        val workoutDaysRaw = rootMap["workoutDays"] as? List<*>
+            ?: rootMap.values.firstNotNullOfOrNull { value ->
+                (value as? Map<*, *>)?.get("workoutDays") as? List<*>
+            }
+
+        // Si no hay workoutDays, lanzamos excepción para que el failover
+        // multicanal salte automáticamente al siguiente proveedor.
+        if (workoutDaysRaw == null) {
+            throw IllegalArgumentException("La respuesta de la IA no tiene workoutDays")
+        }
 
         val workoutDays = workoutDaysRaw.mapIndexed { index, dayRaw ->
             val day = dayRaw as? Map<*, *> ?: return@mapIndexed null
