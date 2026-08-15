@@ -36,6 +36,7 @@ import com.DeBiaseRamiro.gymera.data.remote.dto.FreeExerciseDto
 import com.DeBiaseRamiro.gymera.data.repository.ExerciseImageRepository
 import com.DeBiaseRamiro.gymera.domain.model.Exercise
 import com.DeBiaseRamiro.gymera.domain.model.WorkoutDay
+import com.DeBiaseRamiro.gymera.ui.navigation.Routes
 import com.DeBiaseRamiro.gymera.ui.screens.exercisedetail.translateMuscle
 import com.DeBiaseRamiro.gymera.ui.theme.*
 import sh.calvin.reorderable.ReorderableItem
@@ -198,15 +199,16 @@ fun DayDetailScreen(
                     FloatingActionButton(
                         onClick = {
                             val first = exercises.first()
-                            val route = "exercise_detail" +
-                                "?dayId=${workoutDay.id.encodeForNav()}" +
-                                "&exerciseId=${first.id.encodeForNav()}" +
-                                "&nameEn=${first.nameEn.encodeForNav()}" +
-                                "&nameEs=${first.name.encodeForNav()}" +
-                                "&sets=${first.sets}" +
-                                "&reps=${first.reps.encodeForNav()}" +
-                                "&restSeconds=${first.restSeconds}" +
-                                "&notes=${first.notes.encodeForNav()}"
+                            val route = Routes.exerciseDetail(
+                                dayId = workoutDay.id,
+                                exerciseId = first.id,
+                                nameEn = first.nameEn,
+                                nameEs = first.name,
+                                sets = first.sets,
+                                reps = first.reps,
+                                restSeconds = first.restSeconds,
+                                notes = first.notes
+                            )
                             onExerciseClick(route)
                         },
                         containerColor = GreenSuccess,
@@ -324,15 +326,16 @@ fun DayDetailScreen(
                                     elevation          = elevation,
                                     dragHandleModifier = dragModifier,
                                     onClick = {
-                                        val route = "exercise_detail" +
-                                                "?dayId=${workoutDay.id.encodeForNav()}" +
-                                                "&exerciseId=${exercise.id.encodeForNav()}" +
-                                                "&nameEn=${exercise.nameEn.encodeForNav()}" +
-                                                "&nameEs=${exercise.name.encodeForNav()}" +
-                                                "&sets=${exercise.sets}" +
-                                                "&reps=${exercise.reps.encodeForNav()}" +
-                                                "&restSeconds=${exercise.restSeconds}" +
-                                                "&notes=${exercise.notes.encodeForNav()}"
+                                        val route = Routes.exerciseDetail(
+                                            dayId = workoutDay.id,
+                                            exerciseId = exercise.id,
+                                            nameEn = exercise.nameEn,
+                                            nameEs = exercise.name,
+                                            sets = exercise.sets,
+                                            reps = exercise.reps,
+                                            restSeconds = exercise.restSeconds,
+                                            notes = exercise.notes
+                                        )
                                         onExerciseClick(route)
                                     }
                                 )
@@ -360,13 +363,16 @@ fun DayDetailScreen(
                 viewModel.resetSearch()
             },
             onViewDetails    = { dto ->
-                val route = "exercise_detail" +
-                        "?nameEn=${dto.name.encodeForNav()}" +
-                        "&nameEs=${dto.name.encodeForNav()}" +
-                        "&sets=0" +
-                        "&reps=${"-".encodeForNav()}" +
-                        "&restSeconds=0" +
-                        "&notes=${"-".encodeForNav()}"
+                val route = Routes.exerciseDetail(
+                    dayId = "",
+                    exerciseId = "",
+                    nameEn = dto.name,
+                    nameEs = dto.name,
+                    sets = 0,
+                    reps = "-",
+                    restSeconds = 0,
+                    notes = "-"
+                )
                 onExerciseClick(route)
             },
             onDismiss        = {
