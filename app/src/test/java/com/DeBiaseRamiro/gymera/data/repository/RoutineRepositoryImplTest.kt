@@ -6,7 +6,7 @@ import com.DeBiaseRamiro.gymera.data.local.dao.RoutineDao
 import com.DeBiaseRamiro.gymera.data.local.entity.ExerciseAssignmentEntity
 import com.DeBiaseRamiro.gymera.data.local.entity.RoutineEntity
 import com.DeBiaseRamiro.gymera.data.local.entity.WorkoutDayEntity
-import com.DeBiaseRamiro.gymera.data.remote.api.GeminiApi
+import com.DeBiaseRamiro.gymera.data.repository.ai.FailoverRoutineGenerator
 import com.DeBiaseRamiro.gymera.domain.model.*
 import io.mockk.*
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -26,7 +26,7 @@ class RoutineRepositoryImplTest {
     @get:Rule
     val coroutineRule = MainCoroutineRule()
 
-    private val mockGeminiApi   = mockk<GeminiApi>()
+    private val mockAiGenerator = mockk<FailoverRoutineGenerator>()
     private val mockRoutineDao  = mockk<RoutineDao>()
 
     @Before
@@ -69,9 +69,161 @@ class RoutineRepositoryImplTest {
     )
 
     private fun createRepository() = RoutineRepositoryImpl(
-        geminiApi  = mockGeminiApi,
-        routineDao = mockRoutineDao
+        aiGenerator = mockAiGenerator,
+        routineDao  = mockRoutineDao
     )
+
+    // ── generateRoutine (failover multicanal) ─────────────────────────────
+
+    private val sampleJson = """
+        {
+          "workoutDays": [
+            {
+              "dayName": "Lunes",
+              "dayOrder": 1,
+              "isRestDay": false,
+              "muscleFocus": "Pecho y Triceps",
+              "exercises": [
+                {
+                  "name": "Press de banca",
+                  "nameEn": "barbell bench press",
+                  "muscleGroup": "Pecho",
+                  "sets": 4,
+                  "reps": "8-12",
+                  "restSeconds": 90,
+                  "notes": "Ajustar peso"
+                }
+              ]
+            },
+            {
+              "dayName": "Martes",
+              "dayOrder": 2,
+              "isRestDay": true,
+              "muscleFocus": "",
+              "exercises": []
+            }
+          ]
+        }
+    """.trimIndent()
+
+    private val userProfile = UserProfile(
+        goal = "MUSCLE_GAIN",
+        daysPerWeek = 1,
+        sessionDuration = 90,
+        level = "INTERMEDIATE",
+        limitations = ""
+    )
+
+    @Test
+    fun `generateRoutine delega al failover y parsea el JSON del proveedor`() = runTest {
+        coEvery { mockAiGenerator.generate(any(), any()) } answers {
+            secondArg<(String) -> Routine>()(sampleJson)
+        }
+
+        val repo = createRepository()
+        val routine = repo.generateRoutine(userProfile, null)
+
+        assertNotNull(routine)
+        assertEquals(2, routine.workoutDays.size)
+        assertEquals("barbell bench press", routine.workoutDays[0].exercises[0].nameEn)
+        coVerify(exactly = 1) { mockAiGenerator.generate(any(), any()) }
+    }
+
+    @Test
+    fun `generateRoutine construye el prompt con la regla de cantidad por duracion`() = runTest {
+        val promptSlot = slot<String>()
+        coEvery { mockAiGenerator.generate(capture(promptSlot), any()) } answers {
+            secondArg<(String) -> Routine>()(sampleJson)
+        }
+
+        val repo = createRepository()
+        repo.generateRoutine(userProfile, null)
+
+        val prompt = promptSlot.captured
+        assertTrue(prompt.contains("Duracion por sesion: 90 minutos"))
+        assertTrue(prompt.contains("7 a 8 ejercicios"))
+        assertTrue(prompt.contains("dolor o lesion"))
+    }
+
+    @Test
+    fun `generateRoutine propaga la excepcion cuando todos los proveedores fallan`() = runTest {
+        coEvery { mockAiGenerator.generate(any(), any()) } throws
+            Exception("Todos los servicios de IA fallaron")
+
+        val repo = createRepository()
+        var threw = false
+        try {
+            repo.generateRoutine(userProfile, null)
+        } catch (e: Exception) {
+            threw = true
+        }
+        assertTrue("Se esperaba excepción cuando el failover falla", threw)
+    }
+
+    @Test
+    fun `generateRoutine unwrappe el JSON cuando la IA lo envuelve en weeklyWorkoutPlan`() = runTest {
+        val wrappedJson = """
+            {
+              "weeklyWorkoutPlan": {
+                "workoutDays": [
+                  {
+                    "dayName": "Lunes",
+                    "dayOrder": 1,
+                    "isRestDay": false,
+                    "muscleFocus": "Pecho y Triceps",
+                    "exercises": [
+                      {
+                        "name": "Press de banca",
+                        "nameEn": "barbell bench press",
+                        "muscleGroup": "Pecho",
+                        "sets": 4,
+                        "reps": "8-12",
+                        "restSeconds": 90,
+                        "notes": "Ajustar peso"
+                      }
+                    ]
+                  },
+                  {
+                    "dayName": "Martes",
+                    "dayOrder": 2,
+                    "isRestDay": true,
+                    "muscleFocus": "",
+                    "exercises": []
+                  }
+                ]
+              }
+            }
+        """.trimIndent()
+
+        coEvery { mockAiGenerator.generate(any(), any()) } answers {
+            secondArg<(String) -> Routine>()(wrappedJson)
+        }
+
+        val repo = createRepository()
+        val routine = repo.generateRoutine(userProfile, null)
+
+        assertNotNull(routine)
+        assertEquals(2, routine.workoutDays.size)
+        assertEquals("barbell bench press", routine.workoutDays[0].exercises[0].nameEn)
+    }
+
+    @Test
+    fun `generateRoutine lanza excepcion cuando la IA devuelve JSON sin workoutDays`() = runTest {
+        val badJson = """{"mensaje": "no tengo days"}"""
+
+        coEvery { mockAiGenerator.generate(any(), any()) } answers {
+            secondArg<(String) -> Routine>()(badJson)
+        }
+
+        val repo = createRepository()
+        var threw = false
+        try {
+            repo.generateRoutine(userProfile, null)
+        } catch (e: Exception) {
+            threw = true
+        }
+        assertTrue("Se esperaba excepción cuando el JSON no tiene workoutDays", threw)
+    }
 
     // ── saveRoutine ───────────────────────────────────────────────────────
 

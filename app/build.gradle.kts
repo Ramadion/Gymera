@@ -26,6 +26,7 @@ android {
             localProperties.load(localPropertiesFile.inputStream())
         }
         buildConfigField("String", "EXERCISE_DB_KEY", "\"${localProperties.getProperty("EXERCISE_DB_KEY")}\"")
+        buildConfigField("String", "GROQ_API_KEY", "\"${localProperties.getProperty("GROQ_API_KEY")}\"")
         buildConfigField("String", "GEMINI_API_KEY", "\"${localProperties.getProperty("GEMINI_API_KEY")}\"")
     }
 
