@@ -60,7 +60,7 @@ fun LoginScreen(
             Image(
                 painter = painterResource(id = R.drawable.ic_gymera_logo),
                 contentDescription = "Logo Gymera",
-                modifier = Modifier.size(160.dp)
+                modifier = Modifier.width(220.dp)
             )
             Text(
                 text = "Gymera",
