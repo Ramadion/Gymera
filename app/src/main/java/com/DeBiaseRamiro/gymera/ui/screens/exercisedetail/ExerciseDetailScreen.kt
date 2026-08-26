@@ -250,11 +250,6 @@ fun ExerciseDetailScreen(
                             category         = translateCategory(state.dto.category)
                         )
 
-                        // ── NOTAS DE LA IA (COLAPSABLE) ───────────────────────
-                        if (state.sets > 0 && state.notes.isNotBlank() && state.notes != "-") {
-                            NoteCard(notes = state.notes)
-                        }
-
                         // ── INSTRUCCIONES PASO A PASO ─────────────────────────
                         // BUG CORREGIDO: antes usaba state.dto.instructions (inglés siempre).
                         // Ahora usa state.instructionsEs por defecto (del asset traducido),
@@ -421,57 +416,6 @@ private fun InfoRow(label: String, value: String) {
             fontWeight = FontWeight.Medium,
             modifier = Modifier.weight(0.6f)
         )
-    }
-}
-
-/**
- * Card colapsable con las notas que generó Gemini.
- * Mismo patrón que CollapsibleInfoCard.
- */
-@Composable
-private fun NoteCard(notes: String) {
-    var isExpanded by remember { mutableStateOf(false) }
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.tertiaryContainer
-        ),
-        shape = RoundedCornerShape(12.dp),
-        onClick = { isExpanded = !isExpanded }
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "💡 Consejo del entrenador IA",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer
-                )
-                Text(
-                    text = if (isExpanded) "▲" else "▼",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer
-                )
-            }
-            AnimatedVisibility(
-                visible = isExpanded,
-                enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically()
-            ) {
-                Text(
-                    text = notes,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer
-                )
-            }
-        }
     }
 }
 

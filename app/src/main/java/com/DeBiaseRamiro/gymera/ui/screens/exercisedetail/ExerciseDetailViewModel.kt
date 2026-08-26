@@ -66,26 +66,31 @@ class ExerciseDetailViewModel @Inject constructor(
 
             val dto = exerciseImageRepository.getExerciseDetail(nameEn)
 
-            // Si no se encontró el ejercicio en el asset, mostramos error
-            if (dto == null) {
-                _uiState.value = ExerciseDetailUiState.Error(
-                    "No se encontró información detallada para \"$nameEs\""
-                )
-                return@launch
-            }
+            // Si no se encontró el ejercicio en el asset, mostramos un estado
+            // degradado con los datos de Gemini (nombre, series, reps, notas)
+            // pero sin imagen ni instrucciones del asset.
+            val exerciseDto = dto ?: FreeExerciseDto(
+                id             = nameEn,
+                name           = nameEn,
+                level          = "",
+                equipment      = null,
+                primaryMuscles = emptyList(),
+                secondaryMuscles = emptyList(),
+                category       = "",
+                images         = emptyList(),
+                instructions   = emptyList(),
+                instructionsEs = emptyList()
+            )
 
-            // Construimos las URLs de imagen para la animación (2 fotos alternadas)
-            val imageUrls = dto.images
+            val imageUrls = exerciseDto.images
                 .orEmpty()
                 .filter { it.isNotBlank() }
                 .map { ExerciseImageRepository.IMAGE_BASE_URL + it }
 
-            // instructionsEs viene del asset — sin loading adicional, sin Gemini.
-            // Si por algún edge case está vacío, la UI usará dto.instructions (inglés).
-            val instructionsEs = dto.instructionsEs
+            val instructionsEs = exerciseDto.instructionsEs
 
             _uiState.value = ExerciseDetailUiState.Success(
-                dto           = dto,
+                dto           = exerciseDto,
                 imageUrls     = imageUrls,
                 nameEs        = nameEs,
                 sets          = sets,

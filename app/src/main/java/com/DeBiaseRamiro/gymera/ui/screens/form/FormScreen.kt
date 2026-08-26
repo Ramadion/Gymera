@@ -6,6 +6,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -14,6 +15,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.DeBiaseRamiro.gymera.domain.model.UserProfile
+import com.DeBiaseRamiro.gymera.ui.components.GymeraDatePickerDialog
+import com.DeBiaseRamiro.gymera.ui.components.WeightHeightFields
+import com.DeBiaseRamiro.gymera.ui.components.formatDateShort
 import com.DeBiaseRamiro.gymera.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.*
@@ -156,11 +160,15 @@ fun StepBirthDate(
     onAnswer: (Long) -> Unit,
     errorMessage: String?
 ) {
-    var showPicker        by remember { mutableStateOf(false) }
-    var selectedDateText  by remember { mutableStateOf("") }
-    var selectedMillis    by remember { mutableStateOf<Long?>(null) }
+    var showPicker        by rememberSaveable { mutableStateOf(false) }
+    var selectedDateText  by rememberSaveable { mutableStateOf("") }
+    var selectedMillis    by rememberSaveable { mutableStateOf<Long?>(null) }
 
-    val datePickerState = rememberDatePickerState()
+    // DatePickerState no es Saveable — se recrea al rotar, pero se inicializa
+    // con la última fecha CONFIRMADA para que el calendario no vuelva a hoy.
+    val datePickerState = rememberDatePickerState(
+        initialSelectedDateMillis = selectedMillis
+    )
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(
@@ -209,7 +217,7 @@ fun StepBirthDate(
         if (errorMessage != null) {
             Text(
                 text     = errorMessage,
-                color    = androidx.compose.ui.graphics.Color(0xFFE57373),
+                color    = RedError,
                 fontSize = 13.sp
             )
         }
@@ -229,36 +237,14 @@ fun StepBirthDate(
 
     // DatePickerDialog
     if (showPicker) {
-        DatePickerDialog(
-            onDismissRequest = { showPicker = false },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        datePickerState.selectedDateMillis?.let { millis ->
-                            val fmt = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-                            selectedDateText = fmt.format(Date(millis))
-                            selectedMillis   = millis
-                        }
-                        showPicker = false
-                    }
-                ) { Text("Confirmar", color = PurplePrimary) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showPicker = false }) {
-                    Text("Cancelar", color = MutedGray)
-                }
-            },
-            colors = DatePickerDefaults.colors(containerColor = SurfaceDark)
-        ) {
-            DatePicker(
-                state  = datePickerState,
-                colors = DatePickerDefaults.colors(
-                    selectedDayContainerColor   = PurplePrimary,
-                    todayDateBorderColor         = PurplePrimary,
-                    containerColor               = SurfaceDark
-                )
-            )
-        }
+        GymeraDatePickerDialog(
+            state     = datePickerState,
+            onDismiss = { showPicker = false },
+            onConfirm = { millis ->
+                selectedDateText = formatDateShort(millis)
+                selectedMillis   = millis
+            }
+        )
     }
 }
 
@@ -269,8 +255,8 @@ fun StepBodyMetrics(
     onAnswer: (Float, Int) -> Boolean,
     errorMessage: String?
 ) {
-    var weightInput by remember { mutableStateOf("") }
-    var heightInput by remember { mutableStateOf("") }
+    var weightInput by rememberSaveable { mutableStateOf("") }
+    var heightInput by rememberSaveable { mutableStateOf("") }
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(
@@ -286,48 +272,14 @@ fun StepBodyMetrics(
             fontSize = 14.sp
         )
 
-        // Campo peso
-        OutlinedTextField(
-            value         = weightInput,
-            onValueChange = { if (it.length <= 5) weightInput = it },
-            label         = { Text("Peso", color = MutedGray) },
-            suffix        = { Text("kg", color = MutedGray) },
-            placeholder   = { Text("Ej: 75", color = MutedGray) },
-            modifier      = Modifier.fillMaxWidth(),
-            singleLine    = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            shape  = RoundedCornerShape(12.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor   = PurplePrimary,
-                unfocusedBorderColor = SurfaceVariant,
-                focusedTextColor     = OnBackground,
-                unfocusedTextColor   = OnBackground,
-                cursorColor          = PurplePrimary,
-                focusedContainerColor   = SurfaceDark,
-                unfocusedContainerColor = SurfaceDark
-            )
-        )
-
-        // Campo altura
-        OutlinedTextField(
-            value         = heightInput,
-            onValueChange = { if (it.length <= 3) heightInput = it },
-            label         = { Text("Altura", color = MutedGray) },
-            suffix        = { Text("cm", color = MutedGray) },
-            placeholder   = { Text("Ej: 175", color = MutedGray) },
-            modifier      = Modifier.fillMaxWidth(),
-            singleLine    = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            shape  = RoundedCornerShape(12.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor   = PurplePrimary,
-                unfocusedBorderColor = SurfaceVariant,
-                focusedTextColor     = OnBackground,
-                unfocusedTextColor   = OnBackground,
-                cursorColor          = PurplePrimary,
-                focusedContainerColor   = SurfaceDark,
-                unfocusedContainerColor = SurfaceDark
-            )
+        // Campos peso y altura (componente compartido con ProfileScreen)
+        WeightHeightFields(
+            weightInput      = weightInput,
+            heightInput      = heightInput,
+            onWeightChange   = { weightInput = it },
+            onHeightChange   = { heightInput = it },
+            showPlaceholders = true,
+            spacing          = 16.dp
         )
 
         // Mensaje de error con validación
@@ -335,7 +287,7 @@ fun StepBodyMetrics(
             errorMessage.split("\n").forEach { line ->
                 Text(
                     text     = "⚠ $line",
-                    color    = androidx.compose.ui.graphics.Color(0xFFE57373),
+                    color    = RedError,
                     fontSize = 13.sp
                 )
             }

@@ -3,20 +3,16 @@ package com.DeBiaseRamiro.gymera.ui.screens.form
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.DeBiaseRamiro.gymera.data.local.dao.UserProfileDao
-import com.DeBiaseRamiro.gymera.data.local.entity.UserProfileEntity
+import com.DeBiaseRamiro.gymera.data.repository.buildUserProfileEntity
+import com.DeBiaseRamiro.gymera.data.repository.calculateAge
+import com.DeBiaseRamiro.gymera.data.repository.syncProfileToFirestore
 import com.DeBiaseRamiro.gymera.domain.model.UserProfile
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.SetOptions
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
-import java.time.Instant
-import java.time.LocalDate
-import java.time.Period
-import java.time.ZoneId
 import javax.inject.Inject
 
 @HiltViewModel
@@ -113,38 +109,27 @@ class FormViewModel @Inject constructor(
         val uid = firebaseAuth.currentUser?.uid ?: return
 
         viewModelScope.launch {
-            val age = calculateAge(birthDateMs)
-
             userProfileDao.saveProfile(
-                UserProfileEntity(
-                    uid            = uid,
-                    age            = age,
-                    weightKg       = weightKg,
-                    heightCm       = heightCm,
-                    gender         = gender,
-                    birthDateMillis = birthDateMs
+                buildUserProfileEntity(
+                    uid             = uid,
+                    birthDateMillis = birthDateMs,
+                    weightKg        = weightKg,
+                    heightCm        = heightCm,
+                    gender          = gender
                 )
             )
 
             // Sync a Firestore en background — si falla, Room tiene los datos
             launch {
-                try {
-                    firestore.collection("users")
-                        .document(uid)
-                        .set(
-                            mapOf(
-                                "age"            to age,
-                                "weightKg"       to weightKg,
-                                "heightCm"       to heightCm,
-                                "gender"         to gender,
-                                "birthDateMillis" to birthDateMs
-                            ),
-                            SetOptions.merge()
-                        )
-                        .await()
-                } catch (e: Exception) {
-                    android.util.Log.w("GYM_PROFILE", "Sync físico falló: ${e.message}")
-                }
+                syncProfileToFirestore(
+                    firestore       = firestore,
+                    uid             = uid,
+                    age             = calculateAge(birthDateMs),
+                    weightKg        = weightKg,
+                    heightCm        = heightCm,
+                    gender          = gender,
+                    birthDateMillis = birthDateMs
+                )
             }
         }
     }
@@ -157,14 +142,5 @@ class FormViewModel @Inject constructor(
 
     fun previousStep() {
         if (_currentStep.value > 0) _currentStep.value -= 1
-    }
-
-    // ── Cálculo de edad desde fecha de nacimiento ─────────────────────────
-    private fun calculateAge(birthDateMillis: Long): Int {
-        if (birthDateMillis <= 0L) return 0
-        val birthDate = Instant.ofEpochMilli(birthDateMillis)
-            .atZone(ZoneId.systemDefault())
-            .toLocalDate()
-        return Period.between(birthDate, LocalDate.now()).years
     }
 }

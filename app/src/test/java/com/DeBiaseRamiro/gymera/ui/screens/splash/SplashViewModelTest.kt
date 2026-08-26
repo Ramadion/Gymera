@@ -2,6 +2,7 @@ package com.DeBiaseRamiro.gymera.ui.screens.splash
 
 import android.util.Log
 import com.DeBiaseRamiro.gymera.MainCoroutineRule
+import com.DeBiaseRamiro.gymera.data.repository.ExerciseImageRepository
 import com.DeBiaseRamiro.gymera.domain.model.*
 import com.DeBiaseRamiro.gymera.domain.repository.FirestoreRepository
 import com.DeBiaseRamiro.gymera.domain.repository.RoutineRepository
@@ -24,10 +25,11 @@ class SplashViewModelTest {
     @get:Rule
     val coroutineRule = MainCoroutineRule()
 
-    private val mockRoutineRepository   = mockk<RoutineRepository>()
-    private val mockFirestoreRepository = mockk<FirestoreRepository>()
-    private val mockFirebaseAuth        = mockk<FirebaseAuth>()
-    private val mockFirebaseUser        = mockk<FirebaseUser>()
+    private val mockRoutineRepository     = mockk<RoutineRepository>()
+    private val mockFirestoreRepository   = mockk<FirestoreRepository>()
+    private val mockFirebaseAuth          = mockk<FirebaseAuth>()
+    private val mockFirebaseUser          = mockk<FirebaseUser>()
+    private val mockExerciseImageRepository = mockk<ExerciseImageRepository>()
 
     @Before
     fun setUp() {
@@ -36,6 +38,10 @@ class SplashViewModelTest {
         every { Log.d(any(), any()) } returns 0
         every { Log.w(any(), any<String>()) } returns 0
         every { Log.e(any(), any(), any<Throwable>()) } returns 0
+
+        // Warm-up de ejercicios en init del SplashViewModel — mock por defecto.
+        coEvery { mockExerciseImageRepository.getAllExercises() } returns emptyList()
+        coEvery { mockExerciseImageRepository.getMuscleGroups() } returns emptyList()
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────
@@ -49,9 +55,10 @@ class SplashViewModelTest {
     )
 
     private fun createViewModel() = SplashViewModel(
-        routineRepository   = mockRoutineRepository,
-        firestoreRepository = mockFirestoreRepository,
-        firebaseAuth        = mockFirebaseAuth
+        routineRepository       = mockRoutineRepository,
+        firestoreRepository     = mockFirestoreRepository,
+        exerciseImageRepository = mockExerciseImageRepository,
+        firebaseAuth            = mockFirebaseAuth
     )
 
     // ── Tests ─────────────────────────────────────────────────────────────
