@@ -2,6 +2,7 @@ package com.DeBiaseRamiro.gymera.ui.screens.splash
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.DeBiaseRamiro.gymera.data.repository.ExerciseImageRepository
 import com.DeBiaseRamiro.gymera.domain.repository.FirestoreRepository
 import com.DeBiaseRamiro.gymera.domain.repository.RoutineRepository
 import com.google.firebase.auth.FirebaseAuth
@@ -24,13 +25,19 @@ sealed class SplashDestination {
 class SplashViewModel @Inject constructor(
     private val routineRepository: RoutineRepository,
     private val firestoreRepository: FirestoreRepository,
+    private val exerciseImageRepository: ExerciseImageRepository,
     private val firebaseAuth: FirebaseAuth
 ) : ViewModel() {
 
     private val _destination = MutableStateFlow<SplashDestination>(SplashDestination.Loading)
     val destination: StateFlow<SplashDestination> = _destination
 
-    init { checkDestination() }
+    init {
+        checkDestination()
+        // Precarga los ejercicios del asset en background mientras se muestra el splash.
+        // La primera vez parsea el JSON y siembra Room (~200ms); las siguientes solo lee RAM.
+        viewModelScope.launch { exerciseImageRepository.getAllExercises() }
+    }
 
     private fun checkDestination() {
         viewModelScope.launch {

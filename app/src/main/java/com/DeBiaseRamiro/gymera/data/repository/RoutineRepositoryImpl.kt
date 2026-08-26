@@ -246,11 +246,14 @@ class RoutineRepositoryImpl @Inject constructor(
 
     // 1) Los ejercicios del día origen pasan al día destino.
     // 2) El día destino deja de ser descanso y queda activo.
-    // 3) Se renumera el orden del día destino (los movidos iban con su orden viejo).
-    // 4) El día origen NO se borra: queda como día de descanso (vacío).
+    // 3) Se copia la descripción (muscleFocus) del origen al destino.
+    // 4) Se renumera el orden del día destino (los movidos iban con su orden viejo).
+    // 5) El día origen queda como día de descanso vacío (sin ejercicios ni descripción).
     override suspend fun moveExercisesToRestDay(fromDayId: String, toDayId: String) {
+        val sourceDay = routineDao.getWorkoutDayById(fromDayId)
         routineDao.reassignExercises(fromDayId, toDayId)
         routineDao.updateWorkoutDayIsRest(toDayId, 0)
+        routineDao.updateWorkoutDayMuscleFocus(toDayId, sourceDay?.muscleFocus ?: "")
 
         val reordered = routineDao.getExercisesForDay(toDayId)
             .sortedBy { it.orderInDay }
@@ -259,6 +262,7 @@ class RoutineRepositoryImpl @Inject constructor(
         }
 
         routineDao.updateWorkoutDayIsRest(fromDayId, 1)
+        routineDao.updateWorkoutDayMuscleFocus(fromDayId, "")
     }
 
     // ── Helpers privados ──────────────────────────────────────────────────

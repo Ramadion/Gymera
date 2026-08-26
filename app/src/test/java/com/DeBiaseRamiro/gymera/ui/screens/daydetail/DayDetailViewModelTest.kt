@@ -37,6 +37,10 @@ class DayDetailViewModelTest {
 
         // Por defecto las imágenes devuelven Error para simplificar los tests
         coEvery { mockExerciseImageRepository.getImageUrl(any()) } returns null
+
+        // removeUnmatchedExercises llama getExerciseDetail por cada ejercicio.
+        // Por defecto devolvemos un DTO válido para que no se borren ejercicios.
+        coEvery { mockExerciseImageRepository.getExerciseDetail(any()) } returns buildDto()
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────
@@ -275,8 +279,8 @@ class DayDetailViewModelTest {
             buildDto("bench", "Bench Press"),
             buildDto("squat", "Barbell Squat")
         )
-        every { mockExerciseImageRepository.getAllExercises() } returns dtos
-        every { mockExerciseImageRepository.getMuscleGroups() } returns listOf("chest", "quadriceps")
+        coEvery { mockExerciseImageRepository.getAllExercises() } returns dtos
+        coEvery { mockExerciseImageRepository.getMuscleGroups() } returns listOf("chest", "quadriceps")
 
         val viewModel = createViewModel()
 

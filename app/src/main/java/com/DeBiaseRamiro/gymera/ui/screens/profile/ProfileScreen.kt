@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -27,6 +28,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
 import com.bumptech.glide.integration.compose.GlideImage
 import com.google.firebase.auth.FirebaseAuth
+import com.DeBiaseRamiro.gymera.data.repository.calculateAge
+import com.DeBiaseRamiro.gymera.ui.components.GymeraDatePickerDialog
+import com.DeBiaseRamiro.gymera.ui.components.WeightHeightFields
+import com.DeBiaseRamiro.gymera.ui.components.formatDateShort
 import com.DeBiaseRamiro.gymera.ui.theme.*
 import com.DeBiaseRamiro.gymera.ui.shared.SharedRoutineViewModel
 import com.DeBiaseRamiro.gymera.domain.model.Routine
@@ -46,20 +51,23 @@ fun ProfileScreen(
     val sharedRoutineViewModel: SharedRoutineViewModel = hiltViewModel()
     val currentRoutine by sharedRoutineViewModel.currentRoutine.collectAsState()
 
-    var isEditing         by remember { mutableStateOf(false) }
-    var showSignOutDialog by remember { mutableStateOf(false) }
-    var showDatePicker    by remember { mutableStateOf(false) }
+    var isEditing         by rememberSaveable { mutableStateOf(false) }
+    var showSignOutDialog by rememberSaveable { mutableStateOf(false) }
+    var showDatePicker    by rememberSaveable { mutableStateOf(false) }
 
     // Campos del modo edición
-    var selectedDateText   by remember { mutableStateOf("") }
-    var selectedDateMillis by remember { mutableStateOf(0L) }
-    var weightInput        by remember { mutableStateOf("") }
-    var heightInput        by remember { mutableStateOf("") }
-    var genderSelected     by remember { mutableStateOf("No especificado") }
+    var selectedDateText   by rememberSaveable { mutableStateOf("") }
+    var selectedDateMillis by rememberSaveable { mutableStateOf(0L) }
+    var weightInput        by rememberSaveable { mutableStateOf("") }
+    var heightInput        by rememberSaveable { mutableStateOf("") }
+    var genderSelected     by rememberSaveable { mutableStateOf("No especificado") }
 
-    // DatePickerState — rango: entre 100 y 10 años atrás
+    // DatePickerState no es Saveable — se recrea al rotar inicializado con la
+    // última fecha confirmada (o la de Room si aún no se editó).
+    // Rango: entre 100 y 10 años atrás
     val datePickerState = rememberDatePickerState(
-        initialSelectedDateMillis = physicalProfile?.birthDateMillis?.takeIf { it > 0L },
+        initialSelectedDateMillis = selectedDateMillis.takeIf { it > 0L }
+            ?: physicalProfile?.birthDateMillis?.takeIf { it > 0L },
         selectableDates = object : SelectableDates {
             override fun isSelectableDate(utcTimeMillis: Long): Boolean {
                 val now    = System.currentTimeMillis()
@@ -78,8 +86,7 @@ fun ProfileScreen(
                 heightInput    = if (profile.heightCm > 0) profile.heightCm.toString() else ""
                 genderSelected = profile.gender.ifBlank { "No especificado" }
                 if (profile.birthDateMillis > 0L) {
-                    val fmt = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-                    selectedDateText   = fmt.format(Date(profile.birthDateMillis))
+                    selectedDateText   = formatDateShort(profile.birthDateMillis)
                     selectedDateMillis = profile.birthDateMillis
                 }
             }
@@ -103,7 +110,7 @@ fun ProfileScreen(
             confirmButton = {
                 TextButton(onClick = {
                     showSignOutDialog = false
-                    FirebaseAuth.getInstance().signOut()
+                    viewModel.signOut()
                     onSignOut()
                 }) { Text("Cerrar sesión", color = MaterialTheme.colorScheme.error) }
             },
@@ -118,36 +125,14 @@ fun ProfileScreen(
 
     // ── DatePickerDialog ──────────────────────────────────────────────────
     if (showDatePicker) {
-        DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        datePickerState.selectedDateMillis?.let { millis ->
-                            val fmt = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-                            selectedDateText   = fmt.format(Date(millis))
-                            selectedDateMillis = millis
-                        }
-                        showDatePicker = false
-                    }
-                ) { Text("Confirmar", color = PurplePrimary) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) {
-                    Text("Cancelar", color = MutedGray)
-                }
-            },
-            colors = DatePickerDefaults.colors(containerColor = SurfaceDark)
-        ) {
-            DatePicker(
-                state  = datePickerState,
-                colors = DatePickerDefaults.colors(
-                    selectedDayContainerColor = PurplePrimary,
-                    todayDateBorderColor      = PurplePrimary,
-                    containerColor            = SurfaceDark
-                )
-            )
-        }
+        GymeraDatePickerDialog(
+            state     = datePickerState,
+            onDismiss = { showDatePicker = false },
+            onConfirm = { millis ->
+                selectedDateText   = formatDateShort(millis)
+                selectedDateMillis = millis
+            }
+        )
     }
 
     Scaffold(
@@ -318,7 +303,7 @@ fun ProfileScreen(
                             )
                             if (selectedDateMillis > 0L) {
                                 Text(
-                                    text       = "${viewModel.calculateAge(selectedDateMillis)} años",
+                                    text       = "${calculateAge(selectedDateMillis)} años",
                                     color      = PurplePrimary,
                                     fontSize   = 13.sp,
                                     fontWeight = FontWeight.SemiBold
@@ -345,48 +330,12 @@ fun ProfileScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Peso
-                OutlinedTextField(
-                    value         = weightInput,
-                    onValueChange = { if (it.length <= 5) weightInput = it },
-                    label         = { Text("Peso", color = MutedGray) },
-                    suffix        = { Text("kg", color = MutedGray) },
-                    modifier      = Modifier.fillMaxWidth(),
-                    singleLine    = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    shape  = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor      = PurplePrimary,
-                        unfocusedBorderColor    = SurfaceVariant,
-                        focusedTextColor        = OnBackground,
-                        unfocusedTextColor      = OnBackground,
-                        cursorColor             = PurplePrimary,
-                        focusedContainerColor   = SurfaceDark,
-                        unfocusedContainerColor = SurfaceDark
-                    )
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Altura
-                OutlinedTextField(
-                    value         = heightInput,
-                    onValueChange = { if (it.length <= 3) heightInput = it },
-                    label         = { Text("Altura", color = MutedGray) },
-                    suffix        = { Text("cm", color = MutedGray) },
-                    modifier      = Modifier.fillMaxWidth(),
-                    singleLine    = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    shape  = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor      = PurplePrimary,
-                        unfocusedBorderColor    = SurfaceVariant,
-                        focusedTextColor        = OnBackground,
-                        unfocusedTextColor      = OnBackground,
-                        cursorColor             = PurplePrimary,
-                        focusedContainerColor   = SurfaceDark,
-                        unfocusedContainerColor = SurfaceDark
-                    )
+                // Peso y altura (componente compartido con FormScreen)
+                WeightHeightFields(
+                    weightInput    = weightInput,
+                    heightInput    = heightInput,
+                    onWeightChange = { weightInput = it },
+                    onHeightChange = { heightInput = it }
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -895,7 +844,7 @@ private fun colorIMC(imc: Float) = when {
     imc < 18.5f -> androidx.compose.ui.graphics.Color(0xFF64B5F6)
     imc < 25f   -> androidx.compose.ui.graphics.Color(0xFF81C784)
     imc < 30f   -> androidx.compose.ui.graphics.Color(0xFFFFB74D)
-    else        -> androidx.compose.ui.graphics.Color(0xFFE57373)
+    else        -> RedError
 }
 
 private fun buildLoadRecommendationBase(

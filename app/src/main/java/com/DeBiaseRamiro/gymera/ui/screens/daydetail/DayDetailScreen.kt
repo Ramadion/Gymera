@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -15,6 +16,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,6 +36,7 @@ import com.DeBiaseRamiro.gymera.data.remote.dto.FreeExerciseDto
 import com.DeBiaseRamiro.gymera.data.repository.ExerciseImageRepository
 import com.DeBiaseRamiro.gymera.domain.model.Exercise
 import com.DeBiaseRamiro.gymera.domain.model.WorkoutDay
+import com.DeBiaseRamiro.gymera.ui.navigation.Routes
 import com.DeBiaseRamiro.gymera.ui.screens.exercisedetail.translateMuscle
 import com.DeBiaseRamiro.gymera.ui.theme.*
 import sh.calvin.reorderable.ReorderableItem
@@ -64,9 +67,10 @@ fun DayDetailScreen(
     val muscleGroups  by viewModel.muscleGroups.collectAsState()
     val selectedMuscle by viewModel.selectedMuscle.collectAsState()
 
-    var showAddSheet by remember { mutableStateOf(false) }
+    var showAddSheet by rememberSaveable { mutableStateOf(false) }
     var showDescriptionDialog by remember { mutableStateOf(false) }
     var editDescriptionText by remember { mutableStateOf(workoutDay.muscleFocus) }
+    val searchListState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
 
     // ── Confirmación de borrado ───────────────────────────────────────────
     // Al deslizar, guardamos el ejercicio aquí en vez de borrarlo directo.
@@ -195,15 +199,16 @@ fun DayDetailScreen(
                     FloatingActionButton(
                         onClick = {
                             val first = exercises.first()
-                            val route = "exercise_detail" +
-                                "?dayId=${workoutDay.id.encodeForNav()}" +
-                                "&exerciseId=${first.id.encodeForNav()}" +
-                                "&nameEn=${first.nameEn.encodeForNav()}" +
-                                "&nameEs=${first.name.encodeForNav()}" +
-                                "&sets=${first.sets}" +
-                                "&reps=${first.reps.encodeForNav()}" +
-                                "&restSeconds=${first.restSeconds}" +
-                                "&notes=${first.notes.encodeForNav()}"
+                            val route = Routes.exerciseDetail(
+                                dayId = workoutDay.id,
+                                exerciseId = first.id,
+                                nameEn = first.nameEn,
+                                nameEs = first.name,
+                                sets = first.sets,
+                                reps = first.reps,
+                                restSeconds = first.restSeconds,
+                                notes = first.notes
+                            )
                             onExerciseClick(route)
                         },
                         containerColor = GreenSuccess,
@@ -321,15 +326,16 @@ fun DayDetailScreen(
                                     elevation          = elevation,
                                     dragHandleModifier = dragModifier,
                                     onClick = {
-                                        val route = "exercise_detail" +
-                                                "?dayId=${workoutDay.id.encodeForNav()}" +
-                                                "&exerciseId=${exercise.id.encodeForNav()}" +
-                                                "&nameEn=${exercise.nameEn.encodeForNav()}" +
-                                                "&nameEs=${exercise.name.encodeForNav()}" +
-                                                "&sets=${exercise.sets}" +
-                                                "&reps=${exercise.reps.encodeForNav()}" +
-                                                "&restSeconds=${exercise.restSeconds}" +
-                                                "&notes=${exercise.notes.encodeForNav()}"
+                                        val route = Routes.exerciseDetail(
+                                            dayId = workoutDay.id,
+                                            exerciseId = exercise.id,
+                                            nameEn = exercise.nameEn,
+                                            nameEs = exercise.name,
+                                            sets = exercise.sets,
+                                            reps = exercise.reps,
+                                            restSeconds = exercise.restSeconds,
+                                            notes = exercise.notes
+                                        )
                                         onExerciseClick(route)
                                     }
                                 )
@@ -348,12 +354,26 @@ fun DayDetailScreen(
             searchResults    = searchResults,
             muscleGroups     = muscleGroups,
             selectedMuscle   = selectedMuscle,
+            listState        = searchListState,
             onQueryChange    = { viewModel.onSearchQueryChanged(it) },
             onMuscleSelected = { viewModel.onMuscleSelected(it) },
             onAdd            = { nameEn, nameEs, muscleGroup, sets, reps, restSeconds ->
                 viewModel.addExercise(nameEn, nameEs, muscleGroup, sets, reps, restSeconds)
                 showAddSheet = false
                 viewModel.resetSearch()
+            },
+            onViewDetails    = { dto ->
+                val route = Routes.exerciseDetail(
+                    dayId = "",
+                    exerciseId = "",
+                    nameEn = dto.name,
+                    nameEs = dto.name,
+                    sets = 0,
+                    reps = "-",
+                    restSeconds = 0,
+                    notes = "-"
+                )
+                onExerciseClick(route)
             },
             onDismiss        = {
                 showAddSheet = false
@@ -439,19 +459,23 @@ private fun AddExerciseBottomSheet(
     searchResults   : List<FreeExerciseDto>,
     muscleGroups    : List<String>,
     selectedMuscle  : String?,
+    listState       : LazyListState,
     onQueryChange   : (String) -> Unit,
     onMuscleSelected: (String?) -> Unit,
     onAdd         : (nameEn: String, nameEs: String, muscleGroup: String, sets: Int, reps: String, restSeconds: Int) -> Unit,
+    onViewDetails : (FreeExerciseDto) -> Unit,
     onDismiss     : () -> Unit
 ) {
     var selectedExercise by remember { mutableStateOf<FreeExerciseDto?>(null) }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
+        sheetState       = sheetState,
         containerColor   = SurfaceDark,
         dragHandle       = { BottomSheetDefaults.DragHandle(color = MutedGray) }
     ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 32.dp)) {
+        Column(modifier = Modifier.fillMaxWidth().fillMaxHeight().padding(horizontal = 16.dp).padding(bottom = 32.dp)) {
 
             if (selectedExercise == null) {
                 Text(text = "Agregar ejercicio", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = OnBackground, modifier = Modifier.padding(bottom = 12.dp))
@@ -517,9 +541,13 @@ private fun AddExerciseBottomSheet(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                LazyColumn(state = listState, modifier = Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(searchResults, key = { it.id }) { dto ->
-                        ExerciseSearchCard(dto = dto, onClick = { selectedExercise = dto })
+                        ExerciseSearchCard(
+                            dto = dto,
+                            onClick = { selectedExercise = dto },
+                            onViewDetails = { onViewDetails(dto) }
+                        )
                     }
                     if (searchResults.isEmpty()) {
                         item {
@@ -555,7 +583,7 @@ private fun AddExerciseBottomSheet(
 
 @Composable
 @OptIn(ExperimentalGlideComposeApi::class)
-private fun ExerciseSearchCard(dto: FreeExerciseDto, onClick: () -> Unit) {
+private fun ExerciseSearchCard(dto: FreeExerciseDto, onClick: () -> Unit, onViewDetails: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -603,12 +631,14 @@ private fun ExerciseSearchCard(dto: FreeExerciseDto, onClick: () -> Unit) {
                 }
             }
 
-            Icon(
-                imageVector = Icons.Default.ChevronRight,
-                contentDescription = null,
-                tint = MutedGray,
-                modifier = Modifier.size(18.dp)
-            )
+            IconButton(onClick = onViewDetails) {
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = "Ver detalles de ${dto.name}",
+                    tint = PurplePrimary,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
         }
     }
 }

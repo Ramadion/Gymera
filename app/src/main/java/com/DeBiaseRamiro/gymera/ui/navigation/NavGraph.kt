@@ -43,12 +43,35 @@ object Routes {
     const val LOADING_IA      = "loading_ia"
     const val ROUTINE         = "routine"
     const val DAY_DETAIL      = "day_detail/{dayId}"
-    const val EXERCISE_DETAIL = "exercise_detail/{exerciseId}"
+    const val EXERCISE_DETAIL = "exercise_detail?dayId={dayId}&exerciseId={exerciseId}&nameEn={nameEn}&nameEs={nameEs}&sets={sets}&reps={reps}&restSeconds={restSeconds}&notes={notes}"
     const val SEARCH          = "search"
     const val PROFILE         = "profile"
 
     fun dayDetail(dayId: String)           = "day_detail/$dayId"
-    fun exerciseDetail(exerciseId: String) = "exercise_detail/$exerciseId"
+
+    // Construye la ruta completa con valores concretos (encodados para nav).
+    // Debe usarse SIEMPRE para navegar a exercise_detail: es la única fuente de
+    // verdad y coincide exactamente con el patrón EXERCISE_DETAIL (crítico para
+    // que popUpTo(Routes.EXERCISE_DETAIL) haga match en next/prev).
+    fun exerciseDetail(
+        dayId: String,
+        exerciseId: String,
+        nameEn: String,
+        nameEs: String,
+        sets: Int,
+        reps: String,
+        restSeconds: Int,
+        notes: String
+    ): String = "exercise_detail" +
+            "?dayId=${dayId.encodeForNav()}" +
+            "&exerciseId=${exerciseId.encodeForNav()}" +
+            "&nameEn=${nameEn.encodeForNav()}" +
+            "&nameEs=${nameEs.encodeForNav()}" +
+            "&sets=$sets" +
+            "&reps=${reps.encodeForNav()}" +
+            "&restSeconds=$restSeconds" +
+            "&notes=${notes.encodeForNav()}"
+
     fun regenForm(goal: String, days: Int, level: String) =
         "regen_form?goal=${goal.encodeForNav()}&days=$days&level=${level.encodeForNav()}"
 }
@@ -289,15 +312,7 @@ fun NavGraph(isUserLoggedIn: Boolean) {
 
             // ── Exercise Detail ───────────────────────────────────────────
             composable(
-                route = "exercise_detail" +
-                        "?dayId={dayId}" +
-                        "&exerciseId={exerciseId}" +
-                        "&nameEn={nameEn}" +
-                        "&nameEs={nameEs}" +
-                        "&sets={sets}" +
-                        "&reps={reps}" +
-                        "&restSeconds={restSeconds}" +
-                        "&notes={notes}",
+                route = Routes.EXERCISE_DETAIL,
                 arguments = listOf(
                     navArgument("dayId")       { type = NavType.StringType; defaultValue = "" },
                     navArgument("exerciseId")  { type = NavType.StringType; defaultValue = "" },
@@ -323,17 +338,18 @@ fun NavGraph(isUserLoggedIn: Boolean) {
                     if (hasNext) {
                         val next = currentDay!!.exercises[currentIndex + 1]
                         {
-                            val route = "exercise_detail" +
-                                "?dayId=${dayId.encodeForNav()}" +
-                                "&exerciseId=${next.id.encodeForNav()}" +
-                                "&nameEn=${next.nameEn.encodeForNav()}" +
-                                "&nameEs=${next.name.encodeForNav()}" +
-                                "&sets=${next.sets}" +
-                                "&reps=${next.reps.encodeForNav()}" +
-                                "&restSeconds=${next.restSeconds}" +
-                                "&notes=${next.notes.encodeForNav()}"
+                            val route = Routes.exerciseDetail(
+                                dayId = dayId,
+                                exerciseId = next.id,
+                                nameEn = next.nameEn,
+                                nameEs = next.name,
+                                sets = next.sets,
+                                reps = next.reps,
+                                restSeconds = next.restSeconds,
+                                notes = next.notes
+                            )
                             navController.navigate(route) {
-                                popUpTo("exercise_detail") { inclusive = true }
+                                popUpTo(Routes.EXERCISE_DETAIL) { inclusive = true }
                             }
                         }
                     } else {
@@ -346,17 +362,18 @@ fun NavGraph(isUserLoggedIn: Boolean) {
                 val onPreviousAction: (() -> Unit)? = if (hasPrevious) {
                     val previous = currentDay!!.exercises[currentIndex - 1]
                     {
-                        val route = "exercise_detail" +
-                            "?dayId=${dayId.encodeForNav()}" +
-                            "&exerciseId=${previous.id.encodeForNav()}" +
-                            "&nameEn=${previous.nameEn.encodeForNav()}" +
-                            "&nameEs=${previous.name.encodeForNav()}" +
-                            "&sets=${previous.sets}" +
-                            "&reps=${previous.reps.encodeForNav()}" +
-                            "&restSeconds=${previous.restSeconds}" +
-                            "&notes=${previous.notes.encodeForNav()}"
+                        val route = Routes.exerciseDetail(
+                            dayId = dayId,
+                            exerciseId = previous.id,
+                            nameEn = previous.nameEn,
+                            nameEs = previous.name,
+                            sets = previous.sets,
+                            reps = previous.reps,
+                            restSeconds = previous.restSeconds,
+                            notes = previous.notes
+                        )
                         navController.navigate(route) {
-                            popUpTo("exercise_detail") { inclusive = true }
+                            popUpTo(Routes.EXERCISE_DETAIL) { inclusive = true }
                         }
                     }
                 } else null
@@ -394,8 +411,9 @@ fun NavGraph(isUserLoggedIn: Boolean) {
             composable(Routes.PROFILE) {
                 ProfileScreen(
                     onSignOut = {
+                        // Limpia todo el back stack y deja LOGIN como única pantalla.
                         navController.navigate(Routes.LOGIN) {
-                            popUpTo(0) { inclusive = true }
+                            popUpTo(navController.graph.id) { inclusive = true }
                         }
                     }
                 )

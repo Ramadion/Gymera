@@ -14,6 +14,17 @@ interface ExerciseCacheDao {
     @Query("SELECT COUNT(*) FROM exercise_cache")
     suspend fun getCount(): Int
 
+    // Timestamp de la fila más reciente de la caché.
+    // Se compara contra PackageInfo.lastUpdateTime para detectar si la caché
+    // fue sembrada por una versión anterior del APK (asset desactualizado).
+    @Query("SELECT MAX(cachedAt) FROM exercise_cache")
+    suspend fun getLatestCachedAt(): Long?
+
+    // Vacia la tabla — usado al detectar caché vieja tras actualizar el APK,
+    // para re-sembrar desde el asset actualizado.
+    @Query("DELETE FROM exercise_cache")
+    suspend fun clearAll()
+
     // Búsqueda por nombre exacto (case-insensitive) — nivel 1 del fuzzy matching
     @Query("SELECT * FROM exercise_cache WHERE LOWER(name) = LOWER(:name) LIMIT 1")
     suspend fun findByExactName(name: String): ExerciseCacheEntity?

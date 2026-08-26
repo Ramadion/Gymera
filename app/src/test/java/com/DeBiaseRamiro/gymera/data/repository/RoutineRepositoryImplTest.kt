@@ -427,8 +427,11 @@ class RoutineRepositoryImplTest {
 
     @Test
     fun `moveExercisesToRestDay mueve ejercicios activa destino y deja el origen como descanso`() = runTest {
+        coEvery { mockRoutineDao.getWorkoutDayById("day-1") } returns WorkoutDayEntity("day-1", "routine-1", "Lunes", 1, 0, "Pecho")
         coEvery { mockRoutineDao.reassignExercises("day-1", "day-rest") } just Runs
         coEvery { mockRoutineDao.updateWorkoutDayIsRest("day-rest", 0) }   just Runs
+        coEvery { mockRoutineDao.updateWorkoutDayMuscleFocus("day-rest", "Pecho") } just Runs
+        coEvery { mockRoutineDao.updateWorkoutDayMuscleFocus("day-1", "") } just Runs
         coEvery { mockRoutineDao.updateWorkoutDayIsRest("day-1", 1) }     just Runs
         coEvery { mockRoutineDao.getExercisesForDay("day-rest") } returns listOf(
             ExerciseAssignmentEntity("m1", "day-rest", "Press de banca", "bench press", "Pecho", 3, "10", 60, 0, ""),
@@ -440,11 +443,13 @@ class RoutineRepositoryImplTest {
         repo.moveExercisesToRestDay("day-1", "day-rest")
 
         // El orden de las operaciones importa: primero mover, luego activar
-        // el destino, y al final marcar el origen como descanso (no se borra).
+        // el destino y copiar la descripción, y al final marcar el origen como descanso.
         coVerifyOrder {
             mockRoutineDao.reassignExercises("day-1", "day-rest")
             mockRoutineDao.updateWorkoutDayIsRest("day-rest", 0)
+            mockRoutineDao.updateWorkoutDayMuscleFocus("day-rest", "Pecho")
             mockRoutineDao.updateWorkoutDayIsRest("day-1", 1)
+            mockRoutineDao.updateWorkoutDayMuscleFocus("day-1", "")
         }
         // El destino queda renumerado de forma secuencial (0..n-1)
         coVerify(exactly = 1) { mockRoutineDao.updateExerciseOrder("m1", 0) }
@@ -453,9 +458,12 @@ class RoutineRepositoryImplTest {
 
     @Test
     fun `moveExercisesToRestDay deja el origen como descanso aunque no haya ejercicios`() = runTest {
+        coEvery { mockRoutineDao.getWorkoutDayById("day-1") } returns WorkoutDayEntity("day-1", "routine-1", "Lunes", 1, 0, "Piernas")
         coEvery { mockRoutineDao.reassignExercises("day-1", "day-rest") } just Runs
         coEvery { mockRoutineDao.updateWorkoutDayIsRest("day-rest", 0) }   just Runs
+        coEvery { mockRoutineDao.updateWorkoutDayMuscleFocus("day-rest", "Piernas") } just Runs
         coEvery { mockRoutineDao.updateWorkoutDayIsRest("day-1", 1) }     just Runs
+        coEvery { mockRoutineDao.updateWorkoutDayMuscleFocus("day-1", "") } just Runs
         coEvery { mockRoutineDao.getExercisesForDay("day-rest") }          returns emptyList()
         coEvery { mockRoutineDao.updateExerciseOrder(any(), any()) }       just Runs
 

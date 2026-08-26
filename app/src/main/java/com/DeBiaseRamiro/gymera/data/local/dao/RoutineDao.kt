@@ -59,6 +59,9 @@ interface RoutineDao {
     @Query("SELECT * FROM workout_day WHERE routineId = :routineId ORDER BY dayOrder ASC")
     suspend fun getWorkoutDays(routineId: String): List<WorkoutDayEntity>
 
+    @Query("SELECT * FROM workout_day WHERE id = :dayId LIMIT 1")
+    suspend fun getWorkoutDayById(dayId: String): WorkoutDayEntity?
+
     @Query("SELECT * FROM exercise_assignment WHERE workoutDayId = :dayId ORDER BY orderInDay ASC")
     suspend fun getExercisesForDay(dayId: String): List<ExerciseAssignmentEntity>
 

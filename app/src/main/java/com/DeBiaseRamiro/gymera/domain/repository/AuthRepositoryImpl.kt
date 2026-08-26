@@ -1,16 +1,21 @@
 package com.DeBiaseRamiro.gymera.data.repository
 
+import android.content.Context
 import com.DeBiaseRamiro.gymera.domain.repository.AuthRepository
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.FirebaseFirestore
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
 class AuthRepositoryImpl @Inject constructor(
     private val firebaseAuth: FirebaseAuth,
-    private val firestore: FirebaseFirestore
+    private val firestore: FirebaseFirestore,
+    @ApplicationContext private val context: Context
 ) : AuthRepository {
 
     override suspend fun signInWithGoogle(idToken: String): FirebaseUser? {
@@ -41,6 +46,12 @@ class AuthRepositoryImpl @Inject constructor(
 
     override fun signOut() {
         firebaseAuth.signOut()
+
+        // También desvinculamos la cuenta de Google Play Services. Sin esto,
+        // el próximo login auto-selecciona la última cuenta usada y NUNCA se
+        // muestra el selector de cuentas (impide cambiar de usuario).
+        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN).build()
+        GoogleSignIn.getClient(context, gso).signOut()
     }
 
     override fun getCurrentUser(): FirebaseUser? {

@@ -106,12 +106,9 @@ class DayDetailViewModel @Inject constructor(
 
     // ── removeUnmatchedExercises ──────────────────────────────────────────
     // Elimina del día los ejercicios que no tienen match en assets
-    // (getExerciseDetail == null). Es la MISMA condición que hoy dispara el
-    // error "No se encontró información detallada para este ejercicio".
-    //
-    // Al no existir en assets no tienen imágenes ni instrucciones: mejor
-    // sacarlos del día directamente en vez de mostrarlos rotos.
-    // El borrado es permanente (Room), así no reaparecen al re-entrar al día.
+    // (getExerciseDetail == null). Defensa extra: la limpieza principal ya se
+    // hizo al guardar la rutina (LoadingViewModel), pero si el asset cambió
+    // entre versiones o Room fue modificado manualmente, esto lo corrige.
     private fun removeUnmatchedExercises(exercises: List<Exercise>) {
         viewModelScope.launch {
             val unmatched = exercises.filter { ex ->
@@ -125,6 +122,7 @@ class DayDetailViewModel @Inject constructor(
             unmatched.forEach { routineRepository.removeExercise(it.id) }
         }
     }
+
     // ── saveOrder ─────────────────────────────────────────────────────────
     // Llamado en onDragStopped — persiste el nuevo orden en Room.
     // Se hace UNA sola vez al soltar el elemento, no en cada posición.

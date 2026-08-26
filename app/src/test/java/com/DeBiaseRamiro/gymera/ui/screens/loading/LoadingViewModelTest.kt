@@ -3,6 +3,7 @@ package com.DeBiaseRamiro.gymera.ui.screens.loading
 import android.util.Log
 import com.DeBiaseRamiro.gymera.MainCoroutineRule
 import com.DeBiaseRamiro.gymera.data.local.dao.UserProfileDao
+import com.DeBiaseRamiro.gymera.data.repository.ExerciseImageRepository
 import com.DeBiaseRamiro.gymera.domain.model.*
 import com.DeBiaseRamiro.gymera.domain.repository.FirestoreRepository
 import com.DeBiaseRamiro.gymera.domain.repository.RoutineRepository
@@ -24,11 +25,12 @@ class LoadingViewModelTest {
     @get:Rule
     val coroutineRule = MainCoroutineRule()
 
-    private val mockRoutineRepository   = mockk<RoutineRepository>()
-    private val mockFirestoreRepository = mockk<FirestoreRepository>()
-    private val mockFirebaseAuth        = mockk<FirebaseAuth>()
-    private val mockFirebaseUser        = mockk<FirebaseUser>()
-    private val mockUserProfileDao      = mockk<UserProfileDao>()
+    private val mockRoutineRepository     = mockk<RoutineRepository>()
+    private val mockFirestoreRepository   = mockk<FirestoreRepository>()
+    private val mockFirebaseAuth          = mockk<FirebaseAuth>()
+    private val mockFirebaseUser          = mockk<FirebaseUser>()
+    private val mockUserProfileDao        = mockk<UserProfileDao>()
+    private val mockExerciseImageRepository = mockk<ExerciseImageRepository>()
 
     @Before
     fun setUp() {
@@ -39,6 +41,9 @@ class LoadingViewModelTest {
 
         every { mockFirebaseAuth.currentUser } returns mockFirebaseUser
         every { mockFirebaseUser.uid }         returns "test-uid"
+
+        // Pre-carga de ejercicios — por defecto vacío para tests
+        coEvery { mockExerciseImageRepository.getExerciseDetail(any()) } returns null
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────
@@ -54,10 +59,11 @@ class LoadingViewModelTest {
     )
 
     private fun createViewModel() = LoadingViewModel(
-        routineRepository   = mockRoutineRepository,
-        firestoreRepository = mockFirestoreRepository,
-        firebaseAuth        = mockFirebaseAuth,
-        userProfileDao      = mockUserProfileDao
+        routineRepository       = mockRoutineRepository,
+        firestoreRepository     = mockFirestoreRepository,
+        exerciseImageRepository = mockExerciseImageRepository,
+        firebaseAuth            = mockFirebaseAuth,
+        userProfileDao          = mockUserProfileDao
     )
 
     // ── Tests ─────────────────────────────────────────────────────────────

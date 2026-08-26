@@ -25,10 +25,14 @@ import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
 import com.bumptech.glide.integration.compose.GlideImage
 import kotlinx.coroutines.delay
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.ui.platform.LocalContext
+import com.bumptech.glide.Glide
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalGlideComposeApi::class)
 @Composable
@@ -246,11 +250,6 @@ fun ExerciseDetailScreen(
                             category         = translateCategory(state.dto.category)
                         )
 
-                        // ── NOTAS DE LA IA (COLAPSABLE) ───────────────────────
-                        if (state.sets > 0 && state.notes.isNotBlank() && state.notes != "-") {
-                            NoteCard(notes = state.notes)
-                        }
-
                         // ── INSTRUCCIONES PASO A PASO ─────────────────────────
                         // BUG CORREGIDO: antes usaba state.dto.instructions (inglés siempre).
                         // Ahora usa state.instructionsEs por defecto (del asset traducido),
@@ -421,57 +420,6 @@ private fun InfoRow(label: String, value: String) {
 }
 
 /**
- * Card colapsable con las notas que generó Gemini.
- * Mismo patrón que CollapsibleInfoCard.
- */
-@Composable
-private fun NoteCard(notes: String) {
-    var isExpanded by remember { mutableStateOf(false) }
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.tertiaryContainer
-        ),
-        shape = RoundedCornerShape(12.dp),
-        onClick = { isExpanded = !isExpanded }
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "💡 Consejo del entrenador IA",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer
-                )
-                Text(
-                    text = if (isExpanded) "▲" else "▼",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer
-                )
-            }
-            AnimatedVisibility(
-                visible = isExpanded,
-                enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically()
-            ) {
-                Text(
-                    text = notes,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer
-                )
-            }
-        }
-    }
-}
-
-/**
  * Instrucciones paso a paso con toggle ES / EN.
  *
  * @param instructions      lista ya resuelta (español o inglés según toggle)
@@ -611,6 +559,8 @@ fun translateLevel(level: String): String = when (level.lowercase().trim()) {
 
 /**
  * Imagen animada que alterna entre las fotos del ejercicio cada 1.5 segundos.
+ * Todas las imágenes están compuestas a la vez (apiladas) y se hace un
+ * crossfade entre ellas, evitando el pantallazo gris mientras Glide carga.
  * Si solo hay una imagen la muestra estática.
  * Si no hay imágenes muestra un placeholder con ícono.
  */
@@ -620,36 +570,62 @@ private fun AnimatedExerciseImage(
     imageUrls: List<String>,
     exerciseName: String
 ) {
-    var currentIndex by remember { mutableIntStateOf(0) }
+    val context = LocalContext.current
+
+    // Precargamos todas las imágenes para que el crossfade no muestre huecos.
+    LaunchedEffect(imageUrls) {
+        imageUrls.forEach { url -> Glide.with(context).load(url).preload() }
+    }
 
     if (imageUrls.size >= 2) {
+        var currentIndex by remember { mutableIntStateOf(0) }
+
         LaunchedEffect(Unit) {
             while (true) {
                 delay(1500L)
                 currentIndex = (currentIndex + 1) % imageUrls.size
             }
         }
-    }
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(260.dp)
-            .background(MaterialTheme.colorScheme.surfaceVariant),
-        contentAlignment = Alignment.Center
-    ) {
-        if (imageUrls.isEmpty()) {
-            Icon(
-                imageVector = Icons.Default.FitnessCenter,
-                contentDescription = null,
-                modifier = Modifier.size(64.dp),
-                tint = MaterialTheme.colorScheme.outline
-            )
-        } else {
-            key(currentIndex) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(260.dp)
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center
+        ) {
+            Crossfade(
+                targetState = currentIndex,
+                animationSpec = tween(durationMillis = 300),
+                label = "Imagen ${exerciseName}"
+            ) { index ->
                 GlideImage(
-                    model = imageUrls[currentIndex],
-                    contentDescription = "Demostración de $exerciseName — paso ${currentIndex + 1}",
+                    model = imageUrls[index],
+                    contentDescription = "Demostración de $exerciseName — paso ${index + 1}",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            }
+        }
+    } else {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(260.dp)
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center
+        ) {
+            if (imageUrls.isEmpty()) {
+                Icon(
+                    imageVector = Icons.Default.FitnessCenter,
+                    contentDescription = null,
+                    modifier = Modifier.size(64.dp),
+                    tint = MaterialTheme.colorScheme.outline
+                )
+            } else {
+                GlideImage(
+                    model = imageUrls[0],
+                    contentDescription = "Demostración de $exerciseName",
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
                 )

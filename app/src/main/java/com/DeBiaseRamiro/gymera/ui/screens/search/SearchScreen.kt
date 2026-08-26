@@ -30,7 +30,7 @@ import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
 import com.bumptech.glide.integration.compose.GlideImage
 import com.DeBiaseRamiro.gymera.data.remote.dto.FreeExerciseDto
 import com.DeBiaseRamiro.gymera.data.repository.ExerciseImageRepository
-import com.DeBiaseRamiro.gymera.ui.screens.daydetail.encodeForNav
+import com.DeBiaseRamiro.gymera.ui.navigation.Routes
 import com.DeBiaseRamiro.gymera.ui.screens.exercisedetail.translateEquipment
 import com.DeBiaseRamiro.gymera.ui.screens.exercisedetail.translateMuscle
 import com.DeBiaseRamiro.gymera.ui.theme.*
@@ -272,17 +272,16 @@ fun SearchScreen(
                             SearchExerciseCard(
                                 exercise = exercise,
                                 onClick = {
-                                    // Construimos la ruta igual que en DayDetailScreen
-                                    // pero sin sets/reps/descanso (no vienen del JSON base)
-                                    // pasamos 0/defaults para que ExerciseDetailScreen
-                                    // muestre solo la info del repositorio
-                                    val route = "exercise_detail" +
-                                            "?nameEn=${exercise.name.encodeForNav()}" +
-                                            "&nameEs=${exercise.name.encodeForNav()}" +
-                                            "&sets=0" +
-                                            "&reps=${"-".encodeForNav()}" +
-                                            "&restSeconds=0" +
-                                            "&notes=${"-".encodeForNav()}"
+                                    val route = Routes.exerciseDetail(
+                                        dayId = "",
+                                        exerciseId = "",
+                                        nameEn = exercise.name,
+                                        nameEs = exercise.name,
+                                        sets = 0,
+                                        reps = "-",
+                                        restSeconds = 0,
+                                        notes = "-"
+                                    )
                                     onExerciseClick(route)
                                 }
                             )

@@ -20,6 +20,7 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
 import androidx.compose.ui.res.painterResource
 import com.DeBiaseRamiro.gymera.R
+import com.DeBiaseRamiro.gymera.BuildConfig
 
 @Composable
 fun LoginScreen(
@@ -59,7 +60,7 @@ fun LoginScreen(
             Image(
                 painter = painterResource(id = R.drawable.ic_gymera_logo),
                 contentDescription = "Logo Gymera",
-                modifier = Modifier.size(160.dp)
+                modifier = Modifier.width(220.dp)
             )
             Text(
                 text = "Gymera",
@@ -98,9 +99,9 @@ fun LoginScreen(
 
 @Composable
 fun GoogleSignInButton(onTokenReceived: (String) -> Unit) {
-    // El web_client_id lo vas a sacar de google-services.json
-    // Busca la entrada con client_type: 3
-    val webClientId = "684744802241-ad4bk511d0vupa833eigvvvmtvlu2u5b.apps.googleusercontent.com"
+    // El web_client_id viene de local.properties → BuildConfig (patrón de las otras claves).
+    // Busca la entrada con client_type: 3 en google-services.json para regenerarlo.
+    val webClientId = BuildConfig.WEB_CLIENT_ID
 
     val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
         .requestIdToken(webClientId)   // Pedimos el token para Firebase

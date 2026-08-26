@@ -3,6 +3,7 @@ package com.DeBiaseRamiro.gymera.ui.screens.loading
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.DeBiaseRamiro.gymera.data.local.dao.UserProfileDao
+import com.DeBiaseRamiro.gymera.data.repository.ExerciseImageRepository
 import com.DeBiaseRamiro.gymera.domain.model.Routine
 import com.DeBiaseRamiro.gymera.domain.model.UserPhysicalProfile
 import com.DeBiaseRamiro.gymera.domain.model.UserProfile
@@ -25,6 +26,7 @@ sealed class LoadingUiState {
 class LoadingViewModel @Inject constructor(
     private val routineRepository: RoutineRepository,
     private val firestoreRepository: FirestoreRepository,
+    private val exerciseImageRepository: ExerciseImageRepository,
     private val firebaseAuth: FirebaseAuth,
     private val userProfileDao: UserProfileDao
 ) : ViewModel() {
@@ -54,7 +56,21 @@ class LoadingViewModel @Inject constructor(
                 }
 
                 // 1. Generamos via Gemini
-                val routine = routineRepository.generateRoutine(userProfile, physicalProfile)
+                val rawRoutine = routineRepository.generateRoutine(userProfile, physicalProfile)
+
+                // 1b. Filtramos ejercicios que no matcheen con el asset.
+                //     Esto asegura que el conteo guardado en Room sea correcto
+                //     desde el inicio y el usuario no vea ejercicios desaparecer
+                //     al abrir un día.
+                val routine = rawRoutine.copy(
+                    workoutDays = rawRoutine.workoutDays.map { day ->
+                        day.copy(
+                            exercises = day.exercises.filter { ex ->
+                                exerciseImageRepository.getExerciseDetail(ex.nameEn) != null
+                            }
+                        )
+                    }
+                )
 
                 // 2. Guardamos en Room (fuente de verdad local)
                 routineRepository.saveRoutine(routine, uid)
