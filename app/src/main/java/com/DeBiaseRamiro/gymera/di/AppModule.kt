@@ -9,6 +9,7 @@ import com.DeBiaseRamiro.gymera.data.repository.ai.GroqAIProvider
 import com.DeBiaseRamiro.gymera.data.repository.ai.RoutineAIProvider
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreSettings
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -46,7 +47,15 @@ object AppModule {
     fun provideFirebaseAuth(): FirebaseAuth = FirebaseAuth.getInstance()
 
     @Provides @Singleton
-    fun provideFirebaseFirestore(): FirebaseFirestore = FirebaseFirestore.getInstance()
+    fun provideFirebaseFirestore(): FirebaseFirestore =
+        FirebaseFirestore.getInstance().apply {
+            // Persistencia offline: Firestore guarda una copia local en disco.
+            // Si la red falla al abrir la app, la lectura de la rutina puede
+            // resolverse desde el cache en vez de depender de conexión.
+            firestoreSettings = FirebaseFirestoreSettings.Builder()
+                .setPersistenceEnabled(true)
+                .build()
+        }
 
     // OkHttpClient compartido con timeouts generosos para Groq.
     // 30 segundos de read timeout porque la generación de rutinas puede tardar

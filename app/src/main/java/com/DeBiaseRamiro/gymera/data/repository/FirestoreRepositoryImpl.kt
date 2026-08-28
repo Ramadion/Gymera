@@ -6,6 +6,7 @@ import com.DeBiaseRamiro.gymera.domain.model.WorkoutDay
 import com.DeBiaseRamiro.gymera.domain.repository.FirestoreRepository
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import com.google.firebase.firestore.Source
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
@@ -82,6 +83,21 @@ class FirestoreRepositoryImpl @Inject constructor(
     // Descarga la rutina activa desde Firestore y la reconstruye como objeto Routine
     // Se usa en el Splash cuando Room está vacío (dispositivo nuevo)
     override suspend fun fetchRoutineFromCloud(userUid: String): Routine? {
+        return fetchRoutine(userUid, Source.SERVER)
+    }
+
+    // ── fetchRoutineFromCacheFirst ─────────────────────────────────────────
+    // Intenta leer primero del cache local de Firestore (instantáneo, offline)
+    // y, si el cache está vacío, de la red (Source.SERVER).
+    // Es la lectura robusta para el arranque: no depende de tener conexión.
+    override suspend fun fetchRoutineFromCacheFirst(userUid: String): Routine? {
+        // 1º cache local (funciona offline, no dispara red)
+        fetchRoutine(userUid, Source.CACHE)?.let { return it }
+        // 2º red (puede lanzar si hay timeout/offline)
+        return fetchRoutine(userUid, Source.SERVER)
+    }
+
+    private suspend fun fetchRoutine(userUid: String, source: Source): Routine? {
         return try {
             val snapshot = firestore
                 .collection("users")
@@ -89,17 +105,16 @@ class FirestoreRepositoryImpl @Inject constructor(
                 .collection("routines")
                 .whereEqualTo("isActive", true)
                 .limit(1)
-                .get()
+                .get(source)
                 .await()
 
             val doc = snapshot.documents.firstOrNull() ?: return null
 
-            // Reconstruimos el objeto Routine desde el Map de Firestore
             parseRoutineFromFirestore(doc.data ?: return null)
 
         } catch (e: Exception) {
-            android.util.Log.e("GYM_FIRESTORE", "Error bajando rutina: ${e.message}")
-            null  // Si falla la red, devolvemos null y el Splash lo maneja
+            android.util.Log.e("GYM_FIRESTORE", "Error bajando rutina ($source): ${e.message}")
+            null
         }
     }
 

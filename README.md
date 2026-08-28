@@ -21,17 +21,17 @@
 
 <div align="center">
 
-| Pantalla de Rutina | Detalle de Ejercicio | Perfil de Usuario |
-|:---:|:---:|:---:|
-| ![Rutina](docs/screenshots/routine.png) | ![Detalle](docs/screenshots/exercise_detail.png) | ![Perfil](docs/screenshots/profile.png) |
+| Pantalla de Rutina | Detalle de Ejercicio | Día de Entrenamiento | Perfil de Usuario |
+|:---:|:---:|:---:|:---:|
+| ![Rutina](docs/screenshots/routine.jpeg) | ![Detalle](docs/screenshots/exercise_detail.jpeg) | ![Día](docs/screenshots/day_detail.jpeg) | ![Perfil](docs/screenshots/profile.jpeg) |
 
-| Formulario IA | Búsqueda de Ejercicios | Generando Rutina |
-|:---:|:---:|:---:|
-| ![Formulario](docs/screenshots/form.png) | ![Búsqueda](docs/screenshots/search.png) | ![Loading](docs/screenshots/loading.png) |
+|              Formulario IA              | Búsqueda de Ejercicios | Generando Rutina |
+|:---------------------------------------:|:---:|:---:|
+| ![Formulario](docs/screenshots/form.jpeg) | ![Búsqueda](docs/screenshots/search.jpeg) | ![Loading](docs/screenshots/loading.jpeg) |
 
 </div>
 
-> **Nota:** Agregá tus capturas en `docs/screenshots/` con los nombres indicados arriba.
+
 
 ---
 

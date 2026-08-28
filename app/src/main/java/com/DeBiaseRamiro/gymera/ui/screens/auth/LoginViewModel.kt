@@ -2,10 +2,10 @@ package com.DeBiaseRamiro.gymera.ui.screens.auth
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.DeBiaseRamiro.gymera.data.repository.RoutineResolver
 import com.DeBiaseRamiro.gymera.domain.repository.AuthRepository
-import com.DeBiaseRamiro.gymera.domain.repository.FirestoreRepository
-import com.DeBiaseRamiro.gymera.domain.repository.RoutineRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -22,8 +22,7 @@ sealed class LoginUiState {
 @HiltViewModel
 class LoginViewModel @Inject constructor(
     private val authRepository: AuthRepository,
-    private val routineRepository: RoutineRepository,
-    private val firestoreRepository: FirestoreRepository
+    private val routineResolver: RoutineResolver
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<LoginUiState>(LoginUiState.Idle)
@@ -37,27 +36,30 @@ class LoginViewModel @Inject constructor(
                     ?: throw Exception("No se pudo autenticar")
                 android.util.Log.d("GYM_NAV", "Usuario autenticado: ${user.uid}")
 
-                // Nivel 1: verificamos Room (instantáneo)
-                val localRoutine = routineRepository.getActiveRoutine(user.uid)
-                android.util.Log.d("GYM_NAV", "Room local routine: $localRoutine")
-                if (localRoutine != null) {
-                    _uiState.value = LoginUiState.GoToRoutine
-                    return@launch
+                // Resolvemos la rutina con el servicio centralizado.
+                // Solo navegamos a Form cuando hay CERTEZA de que no existe rutina.
+                var attempts = 0
+                while (attempts < MAX_ATTEMPTS) {
+                    when (val result = routineResolver.resolve(user.uid)) {
+                        is RoutineResolver.Result.Found -> {
+                            _uiState.value = LoginUiState.GoToRoutine
+                            return@launch
+                        }
+                        RoutineResolver.Result.None -> {
+                            _uiState.value = LoginUiState.GoToForm
+                            return@launch
+                        }
+                        RoutineResolver.Result.Unavailable -> {
+                            attempts++
+                            delay(RETRY_DELAY_MS)
+                        }
+                    }
                 }
 
-                // Nivel 2: Room vacío — buscamos en Firestore
-                // (caso: cerró sesión, volvió a logearse, Room fue limpiado)
-                val cloudRoutine = firestoreRepository.fetchRoutineFromCloud(user.uid)
-                android.util.Log.d("GYM_NAV", "Firestore cloud routine: $cloudRoutine")
-                if (cloudRoutine != null) {
-                    // Bajamos la rutina a Room para disponibilidad offline
-                    routineRepository.saveRoutine(cloudRoutine, user.uid)
-                    _uiState.value = LoginUiState.GoToRoutine
-                    return@launch
-                }
-
-                // Nivel 3: usuario nuevo o sin rutina — al formulario
-                _uiState.value = LoginUiState.GoToForm
+                // Sin certeza tras los reintentos: no forzamos el Form (no queremos
+                // perder la rutina del usuario por un fallo temporal). Volvemos a
+                // Idle para que el usuario pueda reintentar.
+                _uiState.value = LoginUiState.Error("No se pudo recuperar tu rutina. Reintentá.")
 
             } catch (e: Exception) {
                 _uiState.value = LoginUiState.Error(e.message ?: "Error desconocido")
@@ -66,4 +68,9 @@ class LoginViewModel @Inject constructor(
     }
 
     fun resetState() { _uiState.value = LoginUiState.Idle }
+
+    private companion object {
+        const val MAX_ATTEMPTS = 3
+        const val RETRY_DELAY_MS = 1500L
+    }
 }

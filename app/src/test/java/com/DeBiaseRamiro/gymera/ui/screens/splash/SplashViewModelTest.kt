@@ -3,14 +3,13 @@ package com.DeBiaseRamiro.gymera.ui.screens.splash
 import android.util.Log
 import com.DeBiaseRamiro.gymera.MainCoroutineRule
 import com.DeBiaseRamiro.gymera.data.repository.ExerciseImageRepository
+import com.DeBiaseRamiro.gymera.data.repository.RoutineResolver
 import com.DeBiaseRamiro.gymera.domain.model.*
-import com.DeBiaseRamiro.gymera.domain.repository.FirestoreRepository
 import com.DeBiaseRamiro.gymera.domain.repository.RoutineRepository
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import io.mockk.*
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.*
@@ -25,8 +24,8 @@ class SplashViewModelTest {
     @get:Rule
     val coroutineRule = MainCoroutineRule()
 
+    private val mockRoutineResolver       = mockk<RoutineResolver>()
     private val mockRoutineRepository     = mockk<RoutineRepository>()
-    private val mockFirestoreRepository   = mockk<FirestoreRepository>()
     private val mockFirebaseAuth          = mockk<FirebaseAuth>()
     private val mockFirebaseUser          = mockk<FirebaseUser>()
     private val mockExerciseImageRepository = mockk<ExerciseImageRepository>()
@@ -55,8 +54,8 @@ class SplashViewModelTest {
     )
 
     private fun createViewModel() = SplashViewModel(
+        routineResolver         = mockRoutineResolver,
         routineRepository       = mockRoutineRepository,
-        firestoreRepository     = mockFirestoreRepository,
         exerciseImageRepository = mockExerciseImageRepository,
         firebaseAuth            = mockFirebaseAuth
     )
@@ -66,13 +65,6 @@ class SplashViewModelTest {
     @Test
     fun `estado inicial es Loading`() {
         // El ViewModel empieza en Loading antes de que el init corra
-        // Para capturarlo, mockeamos el Flow para que no emita
-        every { mockFirebaseAuth.currentUser } returns mockFirebaseUser
-        every { mockFirebaseUser.uid } returns "test-uid"
-        every { mockRoutineRepository.getActiveRoutineFlow(any()) } returns flowOf() // nunca emite
-
-        // No podemos capturar Loading con UnconfinedTestDispatcher porque corre todo eager,
-        // pero validamos que el sealed class existe como estado inicial
         assertNotNull(SplashDestination.Loading)
     }
 
@@ -89,38 +81,20 @@ class SplashViewModelTest {
     @Test
     fun `con rutina activa en Room navega a Routine`() = runTest {
         every { mockFirebaseAuth.currentUser } returns mockFirebaseUser
-        every { mockFirebaseUser.uid } returns "test-uid"
-        every { mockRoutineRepository.getActiveRoutineFlow("test-uid") } returns flowOf(buildTestRoutine())
+        every { mockFirebaseUser.uid }         returns "test-uid"
+        coEvery { mockRoutineResolver.resolve("test-uid") } returns RoutineResolver.Result.Found(buildTestRoutine())
 
         val viewModel = createViewModel()
         advanceUntilIdle()
 
         assertEquals(SplashDestination.Routine, viewModel.destination.value)
-    }
-
-    @Test
-    fun `sin rutina local pero con rutina en Firestore guarda y navega a Routine`() = runTest {
-        val cloudRoutine = buildTestRoutine()
-
-        every  { mockFirebaseAuth.currentUser }                              returns mockFirebaseUser
-        every  { mockFirebaseUser.uid }                                      returns "test-uid"
-        every  { mockRoutineRepository.getActiveRoutineFlow("test-uid") }    returns flowOf(null)
-        coEvery { mockFirestoreRepository.fetchRoutineFromCloud("test-uid") } returns cloudRoutine
-        coEvery { mockRoutineRepository.saveRoutine(cloudRoutine, "test-uid") } just Runs
-
-        val viewModel = createViewModel()
-        advanceUntilIdle()
-
-        assertEquals(SplashDestination.Routine, viewModel.destination.value)
-        coVerify(exactly = 1) { mockRoutineRepository.saveRoutine(cloudRoutine, "test-uid") }
     }
 
     @Test
     fun `sin rutina en ningun lado navega a Form`() = runTest {
-        every  { mockFirebaseAuth.currentUser }                              returns mockFirebaseUser
-        every  { mockFirebaseUser.uid }                                      returns "test-uid"
-        every  { mockRoutineRepository.getActiveRoutineFlow("test-uid") }    returns flowOf(null)
-        coEvery { mockFirestoreRepository.fetchRoutineFromCloud("test-uid") } returns null
+        every { mockFirebaseAuth.currentUser } returns mockFirebaseUser
+        every { mockFirebaseUser.uid }         returns "test-uid"
+        coEvery { mockRoutineResolver.resolve("test-uid") } returns RoutineResolver.Result.None
 
         val viewModel = createViewModel()
         advanceUntilIdle()
@@ -129,27 +103,14 @@ class SplashViewModelTest {
     }
 
     @Test
-    fun `saveRoutine no se llama si Room ya tiene la rutina`() = runTest {
+    fun `resolver se usa para decidir la navegacion`() = runTest {
         every { mockFirebaseAuth.currentUser } returns mockFirebaseUser
         every { mockFirebaseUser.uid }         returns "test-uid"
-        every { mockRoutineRepository.getActiveRoutineFlow("test-uid") } returns flowOf(buildTestRoutine())
+        coEvery { mockRoutineResolver.resolve("test-uid") } returns RoutineResolver.Result.None
 
         createViewModel()
         advanceUntilIdle()
 
-        coVerify(exactly = 0) { mockRoutineRepository.saveRoutine(any(), any()) }
-    }
-
-    @Test
-    fun `si Firestore falla navega igualmente a Form`() = runTest {
-        every  { mockFirebaseAuth.currentUser }                               returns mockFirebaseUser
-        every  { mockFirebaseUser.uid }                                       returns "test-uid"
-        every  { mockRoutineRepository.getActiveRoutineFlow("test-uid") }     returns flowOf(null)
-        coEvery { mockFirestoreRepository.fetchRoutineFromCloud("test-uid") } throws RuntimeException("sin red")
-
-        val viewModel = createViewModel()
-        advanceUntilIdle()
-
-        assertEquals(SplashDestination.Form, viewModel.destination.value)
+        coVerify(exactly = 1) { mockRoutineResolver.resolve("test-uid") }
     }
 }
