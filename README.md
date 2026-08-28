@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="app/src/main/res/drawable/LogoGymerasinfondo.png" alt="Gymera Logo" width="220"/>
+<img src="app/src/main/res/drawable/ic_gymera_logo.png" alt="Gymera Logo" width="220"/>
 
 # **GYMERA**
 
