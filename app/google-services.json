@@ -22,6 +22,22 @@
           }
         },
         {
+          "client_id": "684744802241-p6bb8fmtfult44jm722lnpn2n9r4pf4d.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.DeBiaseRamiro.gymera",
+            "certificate_hash": "b6a760b94aaa7e2b296913eed1a85764da60e83d"
+          }
+        },
+        {
+          "client_id": "684744802241-poqpc4m27rqgmhg0h3eo8t496qteero8.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.DeBiaseRamiro.gymera",
+            "certificate_hash": "158fe4b9ebf58f457a2af0364afe59c27831ae20"
+          }
+        },
+        {
           "client_id": "684744802241-ad4bk511d0vupa833eigvvvmtvlu2u5b.apps.googleusercontent.com",
           "client_type": 3
         }

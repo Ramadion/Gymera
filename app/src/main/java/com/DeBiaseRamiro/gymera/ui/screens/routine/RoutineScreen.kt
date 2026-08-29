@@ -455,6 +455,7 @@ private fun SummaryChip(label: String) {
 }
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun WorkoutDayCard(
     day: WorkoutDay,
     onClick: () -> Unit,

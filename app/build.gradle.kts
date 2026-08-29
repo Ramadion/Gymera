@@ -9,6 +9,14 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+val localPropertiesFile = rootProject.file("local.properties")
+val localProperties = Properties()
+if (localPropertiesFile.exists()) {
+    localProperties.load(localPropertiesFile.inputStream())
+}
+
+fun prop(name: String) = localProperties.getProperty(name) ?: ""
+
 android {
     namespace = "com.DeBiaseRamiro.gymera"
     compileSdk = 35
@@ -17,23 +25,28 @@ android {
         applicationId = "com.DeBiaseRamiro.gymera"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
 
-        val localPropertiesFile = rootProject.file("local.properties")
-        val localProperties = Properties()
-        if (localPropertiesFile.exists()) {
-            localProperties.load(localPropertiesFile.inputStream())
+        buildConfigField("String", "EXERCISE_DB_KEY", "\"${prop("EXERCISE_DB_KEY")}\"")
+        buildConfigField("String", "GROQ_API_KEY", "\"${prop("GROQ_API_KEY")}\"")
+        buildConfigField("String", "GEMINI_API_KEY", "\"${prop("GEMINI_API_KEY")}\"")
+        buildConfigField("String", "WEB_CLIENT_ID", "\"${prop("WEB_CLIENT_ID")}\"")
+    }
+
+    signingConfigs {
+        create("release") {
+            storeFile = file(prop("RELEASE_KEYSTORE_PATH"))
+            storePassword = prop("RELEASE_KEYSTORE_PASSWORD")
+            keyAlias = prop("RELEASE_KEY_ALIAS")
+            keyPassword = prop("RELEASE_KEY_PASSWORD")
         }
-        buildConfigField("String", "EXERCISE_DB_KEY", "\"${localProperties.getProperty("EXERCISE_DB_KEY")}\"")
-        buildConfigField("String", "GROQ_API_KEY", "\"${localProperties.getProperty("GROQ_API_KEY")}\"")
-        buildConfigField("String", "GEMINI_API_KEY", "\"${localProperties.getProperty("GEMINI_API_KEY")}\"")
-        buildConfigField("String", "WEB_CLIENT_ID", "\"${localProperties.getProperty("WEB_CLIENT_ID")}\"")
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {
